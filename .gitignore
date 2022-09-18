@@ -1,0 +1,8 @@
+# Ignore pollen images
+pollen_slides
+
+# Python
+*.py[cod]
+
+# Jupyter Notebook
+.ipynb_checkpoints
