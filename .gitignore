@@ -1,5 +1,6 @@
 # Ignore pollen images
 pollen_slides
+pollen_grains
 
 # Python
 *.py[cod]
