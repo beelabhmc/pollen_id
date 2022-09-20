@@ -7,7 +7,10 @@ import datetime
 import cv2 as cv
 import matplotlib.pyplot as plt
 from mpl_toolkits.axes_grid1 import ImageGrid
-
+import skimage
+import skimage.feature 
+import skimage.transform
+import skimage.draw
 # %%
 pollen_slides_dir = "pollen_slides"
 pollen_slides_database_name = "database.csv"
@@ -33,7 +36,7 @@ chosen_idx = np.random.choice(
     pollen_slides_400x_filtered_df.shape[0], replace=False, size=dim * dim
 )
 
-img_downscale = 6
+img_downscale = 20
 
 for i, (index, row) in enumerate(
     pollen_slides_400x_filtered_df.iloc[chosen_idx].iterrows()
@@ -41,7 +44,7 @@ for i, (index, row) in enumerate(
     slide_img = cv.imread(row["path"])
     slide_img = cv.resize(slide_img, (int(slide_img.shape[1] / img_downscale), int(slide_img.shape[0] / img_downscale)))
 
-    slide_img_blurred = cv.medianBlur(slide_img, 9)
+    slide_img_blurred = cv.medianBlur(slide_img, 5)
     # slide_img_hsv = cv.cvtColor(slide_img, cv.COLOR_BGR2HSV)
     # slide_img_lab = cv.cvtColor(slide_img, cv.COLOR_BGR2LAB)
 
@@ -51,62 +54,36 @@ for i, (index, row) in enumerate(
 
     to_draw_img = cv.cvtColor(image_to_detect, cv.COLOR_GRAY2BGR)
 
-    circles = cv.HoughCircles(
-        image_to_detect,
-        cv.HOUGH_GRADIENT_ALT,
-        dp=1.5,
-        minDist=50,
-        # param1=75,
-        # param2=80,
-        param1=10,
-        param2=0.8,
-        minRadius=20,
-        maxRadius=0,
-    )
+    edges = skimage.feature.canny(image_to_detect, sigma=1.5)
+    # result = skimage.transform.hough_ellipse(edges, threshold=4)
+    # result.sort(order='accumulator')
 
-    if circles is not None:
-        circles = np.uint16(np.around(circles))
-        for j in circles[0, :]:
-            # draw the outer circle
-            cv.circle(to_draw_img, (j[0], j[1]), j[2], (0, 255, 0), 10)
-            # draw the center of the circle
-            cv.circle(to_draw_img, (j[0], j[1]), 5, (0, 0, 255), 10)
+    # result = result[-10:]
 
-    # Set our filtering parameters
-    # Initialize parameter setting using cv2.SimpleBlobDetector
-    # params = cv.SimpleBlobDetector_Params()
-    
-    # Set Area filtering parameters
-    # params.filterByArea = True
-    # params.minArea = 100
-    
-    # Set Circularity filtering parameters
-    # params.filterByCircularity = True
-    # params.minCircularity = 0.5
-    
-    # Set Convexity filtering parameters
-    # params.filterByConvexity = True
-    # params.minConvexity = 0.2
-        
-    # Set inertia filtering parameters
-    # params.filterByInertia = True
-    # params.minInertiaRatio = 0.01
-    
-    # Create a detector with the parameters
-    # detector = cv.SimpleBlobDetector_create(params)
-        
-    # # Detect blobs
-    # keypoints = detector.detect(image_to_detect)
-    # print(keypoints)
-    
-    # # Draw blobs on our image as red circles
-    # blank = np.zeros((1, 1))
-    # to_draw_img = cv.drawKeypoints(to_draw_img, keypoints, blank, (0, 0, 255),
-    #                         cv.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
+    # # Estimated parameters for the ellipse
+    # for j in range(len(result)):
+    #     best = list(result[j])
+    #     yc, xc, a, b = [int(round(x)) for x in best[1:5]]
+    #     orientation = best[5]
+
+    #     # Draw the ellipse on the original image
+    #     # cy, cx = skimage.draw.ellipse_perimeter(yc, xc, a, b, orientation)
+    #     # to_draw_img[cy, cx] = (0, 0, 255)
+    #     cv.ellipse(to_draw_img, (xc, yc), (a, b), orientation, 0, 360, (0, 0, 25 5), 1)
+
+    # Detect two radii
+    hough_radii = np.arange(5, 200, 5)
+    hough_res = skimage.transform.hough_circle(edges, hough_radii)
+
+    # Select the most prominent 3 circles
+    accums, cx, cy, radii = skimage.transform.hough_circle_peaks(hough_res, hough_radii,
+                                            total_num_peaks=40)
+    for center_y, center_x, radius in zip(cy, cx, radii):
+        cv.circle(to_draw_img, (center_x, center_y), radius, (0, 255, 0), 1)
 
     grid[i].imshow(cv.cvtColor(to_draw_img, cv.COLOR_BGR2RGB))
     # grid[i].imshow(slide_img_lab[:, :, 0], cmap="gray")
-    # grid[i].imshow(image_to_detect, cmap="gray")
+    # grid[i].imshow(edges, cmap="gray")
     grid[i].get_yaxis().set_ticks([])
     grid[i].get_xaxis().set_ticks([])
 # %%
