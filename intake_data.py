@@ -1,6 +1,5 @@
 # %%
 import pandas as pd
-import os
 import numpy as np
 import pathlib
 import re
@@ -10,15 +9,18 @@ import datetime
 # %%
 # the local path to the folder with all the files in it
 data_dir = "pollen_slides"
+database_name = "database.csv"
 
 # This will get turned into a pandas dataframe after all the files are indexed added to it
 database = {
     "species": [],
     "date": [],  # the date the image was captured
     "path": [],  # the local path to the image,
+    # "slide_id": [],
     "image_location": [],
     "image_depth": [],
     "image_magnification": [],
+    "herbarium_specimen_id": [],
 }
 logging.basicConfig()
 logging.getLogger().setLevel(logging.INFO)
@@ -73,12 +75,14 @@ for f in pathlib.Path(data_dir).glob("**/*.*"):
                     database["image_depth"].append('')
                 # Multiply magnification by 10 to match with post-2019 images
                 database["image_magnification"].append(int(name_segments[1][:2]) * 10)
+                database["herbarium_specimen_id"].append("")
             else:
                 name_segments = f.stem.split("_")
                 assert len(name_segments) == 6, ("warn", f"Invalid name for post-2019 image '{f.name}'")
                 database["image_location"].append(name_segments[4][:2])
                 database["image_depth"].append(name_segments[4][2])
                 database["image_magnification"].append(int(name_segments[3][3:6]))
+                database["herbarium_specimen_id"].append(int(name_segments[0]))
         except AssertionError as e:
             logging_level = e.args[0][0]
             logging_message = e.args[0][1]
@@ -89,5 +93,5 @@ for f in pathlib.Path(data_dir).glob("**/*.*"):
 
 df = pd.DataFrame(database)
 # %%
-df.to_csv(pathlib.Path(data_dir) / "database.csv",index=False)
+df.to_csv(pathlib.Path(data_dir) / database_name,index=False)
 # %%
