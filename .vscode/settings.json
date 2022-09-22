@@ -2,6 +2,7 @@
     "cSpell.words": [
         "imread",
         "imshow",
-        "iterrows"
+        "iterrows",
+        "ndimage"
     ]
 }

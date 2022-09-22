@@ -119,30 +119,26 @@ for i, (index, row) in enumerate(
     thresholdImg = cv.erode(thresholdImg, kernel3, iterations=2)
 
     opening = cv.morphologyEx(thresholdImg, cv.MORPH_OPEN, kernel3, iterations=1)
-    opening = cv.morphologyEx(opening, cv.MORPH_CLOSE, kernel3, iterations=1)
+    opening = cv.morphologyEx(opening, cv.MORPH_CLOSE, kernel3, iterations=2)
 
-    # sure background area
-    sure_bg = cv.dilate(opening, kernel3, iterations=3)
-    # Finding sure foreground area
-    dist_transform = cv.distanceTransform(opening, cv.DIST_L2, 5)
-    ret, sure_fg = cv.threshold(dist_transform, 0.6 * dist_transform.max(), 255, 0)
-    # Finding unknown region
-    sure_fg = np.uint8(sure_fg)
-    unknown = cv.subtract(sure_bg, sure_fg)
+    dist = scipy.ndimage.distance_transform_edt(opening)
+    peak_idx = skimage.feature.peak_local_max(dist, min_distance=20, labels=opening)
 
-    # Marker labelling
-    ret, markers = cv.connectedComponents(sure_fg)
-    # Add one to all labels so that sure background is not 0, but 1
-    markers = markers+1
-    # Now, mark the region of unknown with zero
-    markers[unknown==255] = 0
+    local_max = np.zeros_like(dist, dtype=bool)
+    local_max[tuple(peak_idx.T)] = True
 
-    # grid[i].imshow(cv.cvtColor(to_draw_img, cv.COLOR_BGR2RGB))
-    # grid[i].imshow(slide_img_lab[:, :, 0], cmap="gray")
-    markers = cv.watershed(slide_img, markers)
-    slide_img[markers == -1] = [255,0,0]
+    labels = scipy.ndimage.label(local_max, structure=np.ones((3, 3)))[0]
+    markers = skimage.segmentation.watershed(-dist, labels, mask=opening)
+
+    markers_rounded = markers.astype(np.uint8)
+    ret, m2 = cv.threshold(markers_rounded, 0, 255, cv.THRESH_BINARY|cv.THRESH_OTSU)
+    contours, hierarchy = cv.findContours(markers_rounded, cv.RETR_LIST, cv.CHAIN_APPROX_NONE)
+
+    contours_filtered = []
+    for c in contours:
+        cv.drawContours(slide_img, c, -1, (0, 255, 0), 2)
     
-    grid[i].imshow(markers)
+    grid[i].imshow(slide_img)
     grid[i].get_yaxis().set_ticks([])
     grid[i].get_xaxis().set_ticks([])
 # %%
