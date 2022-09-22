@@ -1,4 +1,5 @@
 # %%
+from ntpath import join
 import pandas as pd
 import numpy as np
 import pathlib
@@ -24,32 +25,6 @@ pollen_slides_df = pd.read_csv(
     pathlib.Path(pollen_slides_dir) / pollen_slides_database_name
 )
 # %%
-# https://towardsdatascience.com/finding-most-common-colors-in-python-47ea0767a06a
-def palette_perc(k_cluster):
-    width = 300
-    palette = np.zeros((50, width, 3), np.uint8)
-
-    n_pixels = len(k_cluster.labels_)
-    counter = Counter(k_cluster.labels_)  # count how many pixels per cluster
-    perc = {}
-    for i in counter:
-        perc[i] = np.round(counter[i] / n_pixels, 2)
-    perc = dict(sorted(perc.items()))
-
-    # for logging purposes
-    # print(perc)
-    # print(k_cluster.cluster_centers_)
-
-    step = 0
-
-    for idx, centers in enumerate(k_cluster.cluster_centers_):
-        palette[:, step : int(step + perc[idx] * width + 1), :] = centers
-        step += int(perc[idx] * width + 1)
-
-    return palette
-
-
-# %%
 dim = 2
 fig = plt.figure(figsize=(10.0, 10.0))
 grid = ImageGrid(
@@ -62,7 +37,7 @@ grid = ImageGrid(
 pollen_slides_400x_filtered_df = pollen_slides_df[
     pollen_slides_df["image_magnification"] == 400
 ]
-np.random.seed(2)
+np.random.seed(3)
 chosen_idx = np.random.choice(
     pollen_slides_400x_filtered_df.shape[0], replace=False, size=dim * dim
 )
@@ -92,6 +67,7 @@ for i, (index, row) in enumerate(
     # slide_img_lab = cv.cvtColor(image_to_detect, cv.COLOR_BGR2LAB)
     # to_draw_img = cv.cvtColor(image_to_detect, cv.COLOR_GRAY2BGR)
 
+    # Find the 3 most common colors in the image
     clt = sklearn.cluster.KMeans(n_clusters=3)
     clt.fit(slide_img_hsv.reshape(-1, 3))
 
@@ -102,10 +78,14 @@ for i, (index, row) in enumerate(
         perc[j] = counter[j] / n_pixels
     perc = dict(sorted(perc.items()))
 
+    # Figure out which of those three is most common
     maxPerc = max(perc.values())
     maxColorIdx = list(perc.keys())[list(perc.values()).index(maxPerc)]
+    # Assume that that color is the background color
     bgColor = clt.cluster_centers_[maxColorIdx]
 
+    # Threshold the image to isolate pollen from the background color
+    # Note: Because we're inverting the binary image, adjustting thresholdRange has the opposite effect you would expect
     thresholdRange = np.array([25, 25, 25])
     thresholdImg = cv.inRange(
         slide_img_hsv, np.abs(bgColor - thresholdRange), np.abs(bgColor + thresholdRange)
@@ -114,15 +94,20 @@ for i, (index, row) in enumerate(
 
     kernel3 = np.ones((3, 3), np.uint8)
     kernel1 = np.ones((3, 3), np.uint8)
+
+    # General erosion and dilation to remove noise
     # thresholdImg = cv.erode(thresholdImg, kernel3, iterations=1)
     thresholdImg = cv.dilate(thresholdImg, kernel3, iterations=2)
     thresholdImg = cv.erode(thresholdImg, kernel3, iterations=2)
 
+    # Fill any small holes
     opening = cv.morphologyEx(thresholdImg, cv.MORPH_OPEN, kernel3, iterations=1)
+    # Remove any small specs
     opening = cv.morphologyEx(opening, cv.MORPH_CLOSE, kernel3, iterations=2)
 
+    # Watershed Code
     dist = scipy.ndimage.distance_transform_edt(opening)
-    peak_idx = skimage.feature.peak_local_max(dist, min_distance=20, labels=opening)
+    peak_idx = skimage.feature.peak_local_max(dist, min_distance=10, threshold_rel=0.5, labels=opening)
 
     local_max = np.zeros_like(dist, dtype=bool)
     local_max[tuple(peak_idx.T)] = True
@@ -130,15 +115,39 @@ for i, (index, row) in enumerate(
     labels = scipy.ndimage.label(local_max, structure=np.ones((3, 3)))[0]
     markers = skimage.segmentation.watershed(-dist, labels, mask=opening)
 
+    # # Convert the marker data into a format findContours accepts
     markers_rounded = markers.astype(np.uint8)
-    ret, m2 = cv.threshold(markers_rounded, 0, 255, cv.THRESH_BINARY|cv.THRESH_OTSU)
-    contours, hierarchy = cv.findContours(markers_rounded, cv.RETR_LIST, cv.CHAIN_APPROX_NONE)
+    contours = []
+    for j in range(1, markers_rounded.max() + 1):
+        c, _ = cv.findContours(np.array(markers_rounded == j).astype(np.uint8), cv.RETR_LIST, cv.CHAIN_APPROX_NONE)
+        contours += c
+
+    # Draw all contours on the image (these are drawn in blue, the ones we use will be drawn in green later)
+    for c in contours:
+        cv.drawContours(slide_img, c, -1, (255, 0, 0), 2)
 
     contours_filtered = []
     for c in contours:
+        # Fit a circle to the contour. If the contour doesn't fill 40% of the circle, skip it
+        _, r = cv.minEnclosingCircle(c)
+        if cv.contourArea(c) / (np.pi*r**2) < 0.4:
+            continue
+        
+        # If the of the contour is less than 100 pixels, skip it
+        if cv.contourArea(c) < 100:
+            continue
+
+        contours_filtered.append(c)
+
+
+    max_contour_area = max([cv.contourArea(c) for c in contours_filtered])
+    for c in contours_filtered:
+        if not (cv.contourArea(c) > max_contour_area * 0.1):
+            continue
         cv.drawContours(slide_img, c, -1, (0, 255, 0), 2)
     
-    grid[i].imshow(slide_img)
+    grid[i].imshow(cv.cvtColor(slide_img, cv.COLOR_BGR2RGB))
+    # grid[i].imshow(markers)
     grid[i].get_yaxis().set_ticks([])
     grid[i].get_xaxis().set_ticks([])
 # %%
