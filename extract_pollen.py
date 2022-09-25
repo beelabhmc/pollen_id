@@ -1,5 +1,6 @@
 # %%
 from ntpath import join
+from pickletools import uint8
 import pandas as pd
 import numpy as np
 import pathlib
@@ -25,10 +26,10 @@ pollen_slides_df = pd.read_csv(
     pathlib.Path(pollen_slides_dir) / pollen_slides_database_name
 )
 # %%
-%matplotlib widget
+# %matplotlib widget
 import ipywidgets as widgets
 
-dim = 5
+dim = 3
 fig = plt.figure(figsize=(10.0, 10.0))
 grid = ImageGrid(
     fig,
@@ -50,8 +51,9 @@ img_downscale = 10
 for i, (index, row) in enumerate(
     pollen_slides_400x_filtered_df.iloc[chosen_idx].iterrows()
 ):
-    slide_img = cv.imread(row["path"])
-    
+    # slide_img = cv.imread(row["path"])
+    # slide_imgs.append(slide_img)
+    slide_img = slide_imgs[i]
     slide_img = cv.resize(
         slide_img,
         (
@@ -60,45 +62,30 @@ for i, (index, row) in enumerate(
         ),
     )
 
-    # norm = np.zeros(slide_img.shape)
-    # slide_img_normalized = cv.normalize(slide_img, norm, 0, 255, cv.NORM_MINMAX)
-    slide_img_blurred = cv.medianBlur(slide_img, 5)
-    slide_img_blurred = cv.pyrMeanShiftFiltering(slide_img_blurred, 11, 30)
-    # # image_to_detect = slide_img_blurred[:, :, 1]
-    slide_img = slide_img_blurred
+    norm = np.zeros(slide_img.shape)
+    slide_img_normalized = cv.normalize(slide_img, norm, 0, 255, cv.NORM_MINMAX)
+    # slide_img_blurred = cv.medianBlur(slide_img, 5)
+    # slide_img_blurred = cv.pyrMeanShiftFiltering(slide_img_blurred, 11, 30)
+    # image_to_detect = slide_img_blurred[:, :, 1]
+    # slide_img = slide_img_blurred
 
-    slide_img_normalized = (slide_img - np.min(slide_img, axis=(0,1))) / (np.max(slide_img, axis=(0,1)) - np.min(slide_img, axis=(0,1)))
-    slide_img_normalized = (slide_img_normalized * 255).astype(np.uint8)
+    # slide_img_normalized = (slide_img - np.min(slide_img, axis=(0, 1))) / (
+    #     np.max(slide_img, axis=(0, 1)) - np.min(slide_img, axis=(0, 1))
+    # )
+    # slide_img_normalized = (slide_img_normalized * 255).astype(np.uint8)
     image_to_detect = slide_img_normalized
 
     slide_img_hsv = cv.cvtColor(image_to_detect, cv.COLOR_BGR2HSV)
     # slide_img_lab = cv.cvtColor(image_to_detect, cv.COLOR_BGR2LAB)
     # to_draw_img = cv.cvtColor(image_to_detect, cv.COLOR_GRAY2BGR)
 
-    # Find the 3 most common colors in the image
-    n_clusters = 5
-    clt = sklearn.cluster.KMeans(n_clusters=n_clusters)
-    clt.fit(slide_img_hsv.reshape(-1, 3))
-
-    n_pixels = len(clt.labels_)
-    counter = Counter(clt.labels_)  # count how many pixels per cluster
-    perc = {}
-    for j in range(n_clusters):
-        perc[j] = counter[j] / n_pixels
-    perc = dict(sorted(perc.items()))
-
-    # Get the most common colors as an array (the index is the classifer id from KMeans and the value is the percentage of colors they are closet to)
-    perc_array = [v for (k,v) in perc.items()]
-
-    # Get the index of the three least common colors
-    k = 2
-    idxs = np.argpartition(perc_array, k)[:k]
-
-    prediction = clt.predict(slide_img_hsv.reshape(-1, 3)).reshape(slide_img_hsv.shape[:2])
-    
-    thresholdImg = np.zeros_like(prediction)
-    for j in range(k):
-        thresholdImg[prediction == idxs[j]] = 255
+    mask = np.ones(slide_img.shape[:2], np.uint8) * 0
+    bgdModel = np.zeros((1, 65), np.float64)
+    fgdModel = np.zeros((1, 65), np.float64)
+    rect = (1, 1, slide_img.shape[1], slide_img.shape[0])
+    cv.grabCut(image_to_detect, mask, rect, bgdModel, fgdModel, 5, cv.GC_INIT_WITH_RECT)
+    mask2 = np.where((mask == 2) | (mask == 0), 0, 1).astype("uint8")
+    mask_img = image_to_detect * mask2[:, :, np.newaxis]
 
     # kernel3 = np.ones((3, 3), np.uint8)
     # kernel1 = np.ones((3, 3), np.uint8)
@@ -140,22 +127,21 @@ for i, (index, row) in enumerate(
     #     _, r = cv.minEnclosingCircle(c)
     #     if cv.contourArea(c) / (np.pi*r**2) < 0.4:
     #         continue
-        
+
     #     # If the of the contour is less than 100 pixels, skip it
     #     if cv.contourArea(c) < 100:
     #         continue
 
     #     contours_filtered.append(c)
 
-
     # max_contour_area = max([cv.contourArea(c) for c in contours_filtered])
     # for c in contours_filtered:
     #     if not (cv.contourArea(c) > max_contour_area * 0.1):
     #         continue
     #     cv.drawContours(slide_img, c, -1, (0, 255, 0), 2)
-    
-    # grid[i].imshow(cv.cvtColor(slide_img, cv.COLOR_BGR2RGB))
-    grid[i].imshow(prediction)
+
+    grid[i].imshow(cv.cvtColor(mask_img, cv.COLOR_BGR2RGB))
+    # grid[i].imshow(edges)
     grid[i].get_yaxis().set_ticks([])
     grid[i].get_xaxis().set_ticks([])
 # %%
