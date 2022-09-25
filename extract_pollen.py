@@ -24,6 +24,23 @@ pollen_slides_df = pd.read_csv(
     pathlib.Path(pollen_slides_dir) / pollen_slides_database_name
 )
 # %%
+def filterOutSaltPepperNoise(edgeImg):
+    # Get rid of salt & pepper noise.
+    count = 0
+    lastMedian = edgeImg
+    median = cv.medianBlur(edgeImg, 3)
+    while not np.array_equal(lastMedian, median):
+        # get those pixels that gets zeroed out
+        zeroed = np.invert(np.logical_and(median, edgeImg))
+        edgeImg[zeroed] = 0
+
+        count = count + 1
+        if count > 50:
+            break
+        lastMedian = median
+        median = cv.medianBlur(edgeImg, 3)
+
+# %%
 # %matplotlib widget
 import ipywidgets as widgets
 
@@ -69,8 +86,8 @@ for i, (index, row) in enumerate(
     # image_to_detect = slide_img_blurred[:, :, 1]
     # slide_img = slide_img_blurred
 
-    slide_img_normalized = (slide_img - np.min(slide_img, axis=(0, 1))) / (
-        np.max(slide_img, axis=(0, 1)) - np.min(slide_img, axis=(0, 1))
+    slide_img_normalized = (slide_img_normalized - np.min(slide_img_normalized, axis=(0, 1))) / (
+        np.max(slide_img_normalized, axis=(0, 1)) - np.min(slide_img_normalized, axis=(0, 1))
     )
     slide_img_normalized = (slide_img_normalized * 255).astype(np.uint8)
     image_to_detect = slide_img_normalized
@@ -80,6 +97,7 @@ for i, (index, row) in enumerate(
     # to_draw_img = cv.cvtColor(image_to_detect, cv.COLOR_GRAY2BGR)
 
     edges = edge_detector.detectEdges(image_to_detect.astype(np.float32) / 255.0)
+    filterOutSaltPepperNoise(edges)
 
     contours, hierarchy = cv.findContours(((edges**2)*255).astype(np.uint8), cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
     # draw the contours on a copy of the original image
@@ -105,63 +123,64 @@ for i, (index, row) in enumerate(
         255,
         0
     ).astype('uint8')
-    slide_img = slide_img * mask2[:, :, np.newaxis]
+    slide_img_masked = slide_img * mask2[:, :, np.newaxis]
 
-    # kernel3 = np.ones((3, 3), np.uint8)
-    # kernel1 = np.ones((3, 3), np.uint8)
+    kernel3 = np.ones((3, 3), np.uint8)
+    kernel1 = np.ones((3, 3), np.uint8)
 
     # # General erosion and dilation to remove noise
-    # thresholdImg = cv.erode(thresholdImg, kernel3, iterations=1)
-    # thresholdImg = cv.dilate(thresholdImg, kernel3, iterations=2)
-    # thresholdImg = cv.erode(thresholdImg, kernel3, iterations=2)
+    thresholdImg = mask2
+    thresholdImg = cv.erode(thresholdImg, kernel3, iterations=1)
+    thresholdImg = cv.dilate(thresholdImg, kernel3, iterations=2)
+    thresholdImg = cv.erode(thresholdImg, kernel3, iterations=2)
 
-    # # Fill any small holes
-    # opening = cv.morphologyEx(thresholdImg, cv.MORPH_OPEN, kernel3, iterations=1)
-    # # Remove any small specs
-    # opening = cv.morphologyEx(opening, cv.MORPH_CLOSE, kernel3, iterations=2)
+    # Fill any small holes
+    opening = cv.morphologyEx(thresholdImg, cv.MORPH_OPEN, kernel3, iterations=1)
+    # Remove any small specs
+    opening = cv.morphologyEx(opening, cv.MORPH_CLOSE, kernel3, iterations=2)
 
-    # # Watershed Code
-    # dist = scipy.ndimage.distance_transform_edt(opening)
-    # peak_idx = skimage.feature.peak_local_max(dist, min_distance=10, threshold_rel=0.5, labels=opening)
+    # Watershed Code
+    dist = scipy.ndimage.distance_transform_edt(opening)
+    peak_idx = skimage.feature.peak_local_max(dist, min_distance=10, threshold_rel=0.5, labels=opening)
 
-    # local_max = np.zeros_like(dist, dtype=bool)
-    # local_max[tuple(peak_idx.T)] = True
+    local_max = np.zeros_like(dist, dtype=bool)
+    local_max[tuple(peak_idx.T)] = True
 
-    # labels = scipy.ndimage.label(local_max, structure=np.ones((3, 3)))[0]
-    # markers = skimage.segmentation.watershed(-dist, labels, mask=opening)
+    labels = scipy.ndimage.label(local_max, structure=np.ones((3, 3)))[0]
+    markers = skimage.segmentation.watershed(-dist, labels, mask=opening)
 
-    # # Convert the marker data into a format findContours accepts
-    # markers_rounded = markers.astype(np.uint8)
-    # contours = []
-    # for j in range(1, markers_rounded.max() + 1):
-    #     c, _ = cv.findContours(np.array(markers_rounded == j).astype(np.uint8), cv.RETR_LIST, cv.CHAIN_APPROX_NONE)
-    #     contours += c
+    # Convert the marker data into a format findContours accepts
+    markers_rounded = markers.astype(np.uint8)
+    contours = []
+    for j in range(1, markers_rounded.max() + 1):
+        c, _ = cv.findContours(np.array(markers_rounded == j).astype(np.uint8), cv.RETR_LIST, cv.CHAIN_APPROX_NONE)
+        contours += c
 
-    # # Draw all contours on the image (these are drawn in blue, the ones we use will be drawn in green later)
-    # for c in contours:
-    #     cv.drawContours(slide_img, c, -1, (255, 0, 0), 2)
+    # Draw all contours on the image (these are drawn in blue, the ones we use will be drawn in green later)
+    for c in contours:
+        cv.drawContours(slide_img, c, -1, (255, 0, 0), 5)
 
-    # contours_filtered = []
-    # for c in contours:
-    #     # Fit a circle to the contour. If the contour doesn't fill 40% of the circle, skip it
-    #     _, r = cv.minEnclosingCircle(c)
-    #     if cv.contourArea(c) / (np.pi*r**2) < 0.4:
-    #         continue
+    contours_filtered = []
+    for c in contours:
+        # Fit a circle to the contour. If the contour doesn't fill 40% of the circle, skip it
+        _, r = cv.minEnclosingCircle(c)
+        if cv.contourArea(c) / (np.pi*r**2) < 0.4:
+            continue
 
-    #     # If the of the contour is less than 100 pixels, skip it
-    #     if cv.contourArea(c) < 100:
-    #         continue
+        # If the of the contour is less than 100 pixels, skip it
+        if cv.contourArea(c) < 100:
+            continue
 
-    #     contours_filtered.append(c)
+        contours_filtered.append(c)
 
-    # max_contour_area = max([cv.contourArea(c) for c in contours_filtered])
-    # for c in contours_filtered:
-    #     if not (cv.contourArea(c) > max_contour_area * 0.1):
-    #         continue
-    #     cv.drawContours(slide_img, c, -1, (0, 255, 0), 2)
+    max_contour_area = max([cv.contourArea(c) for c in contours_filtered])
+    for c in contours_filtered:
+        if not (cv.contourArea(c) > max_contour_area * 0.1):
+            continue
+        cv.drawContours(slide_img, c, -1, (0, 0, 0), 5)
 
-    grid[i].imshow(cv.cvtColor(mask2, cv.COLOR_BGR2RGB))
-    # grid[i].imshow(image_to_detect)
+    grid[i].imshow(cv.cvtColor(slide_img, cv.COLOR_BGR2RGB))
+    # grid[i].imshow(thresholdImg)
     grid[i].get_yaxis().set_ticks([])
     grid[i].get_xaxis().set_ticks([])
 # %%
