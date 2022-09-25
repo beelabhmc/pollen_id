@@ -1,6 +1,4 @@
 # %%
-from ntpath import join
-from pickletools import uint8
 import pandas as pd
 import numpy as np
 import pathlib
@@ -29,7 +27,7 @@ pollen_slides_df = pd.read_csv(
 # %matplotlib widget
 import ipywidgets as widgets
 
-dim = 3
+dim = 5
 fig = plt.figure(figsize=(10.0, 10.0))
 grid = ImageGrid(
     fig,
@@ -46,7 +44,9 @@ chosen_idx = np.random.choice(
     pollen_slides_400x_filtered_df.shape[0], replace=False, size=dim * dim
 )
 
-img_downscale = 10
+img_downscale = 5
+
+edge_detector = cv.ximgproc.createStructuredEdgeDetection('model.yml')
 
 for i, (index, row) in enumerate(
     pollen_slides_400x_filtered_df.iloc[chosen_idx].iterrows()
@@ -57,7 +57,7 @@ for i, (index, row) in enumerate(
     slide_img = cv.resize(
         slide_img,
         (
-            int(slide_img.shape[1] / img_downscale),
+            int(slide_img.shape[1] /     img_downscale),
             int(slide_img.shape[0] / img_downscale),
         ),
     )
@@ -69,23 +69,43 @@ for i, (index, row) in enumerate(
     # image_to_detect = slide_img_blurred[:, :, 1]
     # slide_img = slide_img_blurred
 
-    # slide_img_normalized = (slide_img - np.min(slide_img, axis=(0, 1))) / (
-    #     np.max(slide_img, axis=(0, 1)) - np.min(slide_img, axis=(0, 1))
-    # )
-    # slide_img_normalized = (slide_img_normalized * 255).astype(np.uint8)
+    slide_img_normalized = (slide_img - np.min(slide_img, axis=(0, 1))) / (
+        np.max(slide_img, axis=(0, 1)) - np.min(slide_img, axis=(0, 1))
+    )
+    slide_img_normalized = (slide_img_normalized * 255).astype(np.uint8)
     image_to_detect = slide_img_normalized
 
-    slide_img_hsv = cv.cvtColor(image_to_detect, cv.COLOR_BGR2HSV)
+    # slide_img_hsv = cv.cvtColor(image_to_detect, cv.COLOR_BGR2HSV)
     # slide_img_lab = cv.cvtColor(image_to_detect, cv.COLOR_BGR2LAB)
     # to_draw_img = cv.cvtColor(image_to_detect, cv.COLOR_GRAY2BGR)
 
-    mask = np.ones(slide_img.shape[:2], np.uint8) * 0
+    edges = edge_detector.detectEdges(image_to_detect.astype(np.float32) / 255.0)
+
+    contours, hierarchy = cv.findContours(((edges**2)*255).astype(np.uint8), cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
+    # draw the contours on a copy of the original image
+    cv.drawContours(image_to_detect, contours, -1, (255, 0, 0), 2)
+
+    mask = np.zeros_like(edges)
+    cv.fillPoly(mask, contours, 255)
+    mapFg = cv.erode(mask, np.ones((5, 5), np.uint8), iterations=10)
+
+    trimap = np.copy(mask).astype(np.uint8)
+    trimap[mask == 0] = cv.GC_BGD
+    trimap[mask == 255] = cv.GC_PR_BGD
+    trimap[mapFg == 255] = cv.GC_FGD
+
     bgdModel = np.zeros((1, 65), np.float64)
     fgdModel = np.zeros((1, 65), np.float64)
     rect = (1, 1, slide_img.shape[1], slide_img.shape[0])
-    cv.grabCut(image_to_detect, mask, rect, bgdModel, fgdModel, 5, cv.GC_INIT_WITH_RECT)
-    mask2 = np.where((mask == 2) | (mask == 0), 0, 1).astype("uint8")
-    mask_img = image_to_detect * mask2[:, :, np.newaxis]
+    cv.grabCut(image_to_detect, trimap, rect, bgdModel, fgdModel, 5, cv.GC_INIT_WITH_MASK)
+
+    # create mask again
+    mask2 = np.where(
+        (trimap == cv.GC_FGD) | (trimap == cv.GC_PR_FGD),
+        255,
+        0
+    ).astype('uint8')
+    slide_img = slide_img * mask2[:, :, np.newaxis]
 
     # kernel3 = np.ones((3, 3), np.uint8)
     # kernel1 = np.ones((3, 3), np.uint8)
@@ -140,8 +160,8 @@ for i, (index, row) in enumerate(
     #         continue
     #     cv.drawContours(slide_img, c, -1, (0, 255, 0), 2)
 
-    grid[i].imshow(cv.cvtColor(mask_img, cv.COLOR_BGR2RGB))
-    # grid[i].imshow(edges)
+    grid[i].imshow(cv.cvtColor(mask2, cv.COLOR_BGR2RGB))
+    # grid[i].imshow(image_to_detect)
     grid[i].get_yaxis().set_ticks([])
     grid[i].get_xaxis().set_ticks([])
 # %%

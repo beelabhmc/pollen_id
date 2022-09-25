@@ -7,3 +7,6 @@ pollen_grains
 
 # Jupyter Notebook
 .ipynb_checkpoints
+
+# opencv edge detection ml model
+model.yml
