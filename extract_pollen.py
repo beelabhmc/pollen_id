@@ -74,16 +74,18 @@ images_to_run_on = (
     else pollen_slides_400x_filtered_df.iloc[chosen_idx]
 )
 
+# This loop could definitely be parallelized for a large speed increase
+# But it takes < 10 mins to run on ~750 images on my laptop so I don't think its worth it
 for i, (index, row) in tqdm(
     enumerate(images_to_run_on.iterrows()), total=len(images_to_run_on)
 ):
     # Read and resize the image
-    slide_img = cv.imread(row["path"])
+    slide_img_full_res = cv.imread(row["path"])
     slide_img = cv.resize(
-        slide_img,
+        slide_img_full_res,
         (
-            int(slide_img.shape[1] / img_downscale),
-            int(slide_img.shape[0] / img_downscale),
+            int(slide_img_full_res.shape[1] / img_downscale),
+            int(slide_img_full_res.shape[0] / img_downscale),
         ),
     )
 
@@ -214,10 +216,43 @@ for i, (index, row) in tqdm(
         grid[i].get_yaxis().set_ticks([])
         grid[i].get_xaxis().set_ticks([])
     else:
-        (pathlib.Path(pollen_grains_dir) / row["species"]).mkdir(parents=True, exist_ok=True)
+        (pathlib.Path(pollen_grains_dir) / row["species"]).mkdir(
+            parents=True, exist_ok=True
+        )
         for j, c in enumerate(contours_final):
+            padding = 10
             x, y, w, h = cv.boundingRect(c)
-            pollen_grain = slide_img[y : y + h, x : x + w]
+
+            # Pick the largest axis to make them squares
+            if w > h:
+                y -= (w - h) // 2
+                h = w
+            else:
+                x -= (h - w) // 2
+                w = h
+
+            # Add padding and scale up to full resolution images
+            y1 = (y - padding) * img_downscale
+            y2 = (y + h + padding) * img_downscale
+            x1 = (x - padding) * img_downscale
+            x2 = (x + w + padding) * img_downscale
+
+            # Move the crop back into the image if it went out of bounds
+            if y1 < 0:
+                y2 -= y1
+                y1 = 0
+            if y2 > slide_img_full_res.shape[0]:
+                y1 -= y2 - slide_img_full_res.shape[0]
+                y2 = slide_img_full_res.shape[0]
+            if x1 < 0:
+                x2 -= x1
+                x1 = 0
+            if x2 > slide_img_full_res.shape[1]:
+                x1 -= x2 - slide_img_full_res.shape[1]
+                x2 = slide_img_full_res.shape[1]
+
+            pollen_grain = slide_img_full_res[y1:y2, x1:x2]
+
             cv.imwrite(
                 str(
                     pathlib.Path(pollen_grains_dir)
