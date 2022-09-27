@@ -10,3 +10,6 @@ pollen_grains
 
 # opencv edge detection ml model
 model.yml
+
+# MacOS
+.DS_Store

@@ -11,9 +11,14 @@ import skimage.transform
 import skimage.draw
 import skimage.segmentation
 import scipy
+import logging
+from tqdm.autonotebook import tqdm
+
 # %%
 pollen_slides_dir = "pollen_slides"
 pollen_slides_database_name = "database.csv"
+pollen_grains_dir = "pollen_grains"
+run_on_full_dataset = True
 # %%
 pollen_slides_df = pd.read_csv(
     pathlib.Path(pollen_slides_dir) / pollen_slides_database_name
@@ -38,31 +43,41 @@ def filterOutSaltPepperNoise(edgeImg):
 
 
 # %%
-dim = 5
-fig = plt.figure(figsize=(10.0, 10.0))
-grid = ImageGrid(
-    fig,
-    111,  # similar to subplot(111)
-    nrows_ncols=(dim, dim),  # creates 2x2 grid of axes
-    # axes_pad=0.1,  # pad between axes in inch.
-)
-
 # Filter out any 100x images
 pollen_slides_400x_filtered_df = pollen_slides_df[
     pollen_slides_df["image_magnification"] == 400
 ]
-np.random.seed(3)
-chosen_idx = np.random.choice(
-    pollen_slides_400x_filtered_df.shape[0], replace=False, size=dim * dim
-)
 
+# If we're not running on all the images, setup graphing code
+if not run_on_full_dataset:
+    dim = 5
+    fig = plt.figure(figsize=(10.0, 10.0))
+    grid = ImageGrid(
+        fig,
+        111,  # similar to subplot(111)
+        nrows_ncols=(dim, dim),  # creates 2x2 grid of axes
+    )
+
+    np.random.seed(3)
+    chosen_idx = np.random.choice(
+        pollen_slides_400x_filtered_df.shape[0], replace=False, size=dim * dim
+    )
+
+# how much to scale images down by for detection (if this number is changed the algorithm will need to be re-tuned)
 img_downscale = 5
 
 edge_detector = cv.ximgproc.createStructuredEdgeDetection("model.yml")
 
-for i, (index, row) in enumerate(
-    pollen_slides_400x_filtered_df.iloc[chosen_idx].iterrows()
+images_to_run_on = (
+    pollen_slides_400x_filtered_df  # normally loop through all images
+    if run_on_full_dataset  # unless the user said to run on a subset (for testing)
+    else pollen_slides_400x_filtered_df.iloc[chosen_idx]
+)
+
+for i, (index, row) in tqdm(
+    enumerate(images_to_run_on.iterrows()), total=len(images_to_run_on)
 ):
+    # Read and resize the image
     slide_img = cv.imread(row["path"])
     slide_img = cv.resize(
         slide_img,
@@ -96,7 +111,8 @@ for i, (index, row) in enumerate(
         ((edges**2) * 255).astype(np.uint8), cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE
     )
     # draw the contours on a copy of the original image
-    cv.drawContours(image_to_detect, contours, -1, (255, 0, 0), 2)
+    image_with_contours = image_to_detect.copy()
+    cv.drawContours(image_with_contours, contours, -1, (255, 0, 0), 2)
 
     # Turn the contours into a black and white mask
     mask = np.zeros_like(edges)
@@ -111,9 +127,13 @@ for i, (index, row) in enumerate(
     bgdModel = np.zeros((1, 65), np.float64)
     fgdModel = np.zeros((1, 65), np.float64)
     rect = (1, 1, slide_img.shape[1], slide_img.shape[0])
-    cv.grabCut(
-        image_to_detect, trimap, rect, bgdModel, fgdModel, 5, cv.GC_INIT_WITH_MASK
-    )
+    try:
+        cv.grabCut(
+            image_to_detect, trimap, rect, bgdModel, fgdModel, 5, cv.GC_INIT_WITH_MASK
+        )
+    except:
+        logging.warning(f"Skipping... grabCut failed on image: {row['path']}")
+        continue
 
     # create mask again
     mask2 = np.where((trimap == cv.GC_FGD) | (trimap == cv.GC_PR_FGD), 255, 0).astype(
@@ -158,9 +178,10 @@ for i, (index, row) in enumerate(
         )
         contours += c
 
+    to_draw_img = slide_img.copy()
     # Draw all contours on the image (these are drawn in blue, the ones we use will be drawn in green later)
     for c in contours:
-        cv.drawContours(slide_img, c, -1, (255, 0, 0), 5)
+        cv.drawContours(to_draw_img, c, -1, (255, 0, 0), 5)
 
     contours_filtered = []
     for c in contours:
@@ -175,14 +196,35 @@ for i, (index, row) in enumerate(
 
         contours_filtered.append(c)
 
+    if len(contours_filtered) == 0:
+        logging.warning(f"Skipping... no contours found on image: {row['path']}")
+        continue
+
     max_contour_area = max([cv.contourArea(c) for c in contours_filtered])
+    contours_final = []
     for c in contours_filtered:
         if not (cv.contourArea(c) > max_contour_area * 0.1):
             continue
-        cv.drawContours(slide_img, c, -1, (0, 0, 0), 5)
+        contours_final.append(c)
+        cv.drawContours(to_draw_img, c, -1, (0, 0, 0), 5)
 
-    grid[i].imshow(cv.cvtColor(slide_img, cv.COLOR_BGR2RGB))
-    # grid[i].imshow(thresholdImg)
-    grid[i].get_yaxis().set_ticks([])
-    grid[i].get_xaxis().set_ticks([])
+    if not run_on_full_dataset:
+        grid[i].imshow(cv.cvtColor(to_draw_img, cv.COLOR_BGR2RGB))
+        # grid[i].imshow(thresholdImg)
+        grid[i].get_yaxis().set_ticks([])
+        grid[i].get_xaxis().set_ticks([])
+    else:
+        (pathlib.Path(pollen_grains_dir) / row["species"]).mkdir(parents=True, exist_ok=True)
+        for j, c in enumerate(contours_final):
+            x, y, w, h = cv.boundingRect(c)
+            pollen_grain = slide_img[y : y + h, x : x + w]
+            cv.imwrite(
+                str(
+                    pathlib.Path(pollen_grains_dir)
+                    / row["species"]
+                    / f"{pathlib.Path(row['path']).stem}.{j}.png"
+                ),
+                pollen_grain,
+            )
+
 # %%

@@ -1,8 +1,17 @@
 {
     "cSpell.words": [
+        "iloc",
         "imread",
         "imshow",
+        "imwrite",
         "iterrows",
-        "ndimage"
+        "ncols",
+        "ndimage",
+        "nrows",
+        "tqdm",
+        "trimap",
+        "xaxis",
+        "ximgproc",
+        "yaxis"
     ]
 }
