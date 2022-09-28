@@ -6,6 +6,8 @@ Repository for the Pollen ID project
 1. Clone this git repo: `git clone https://github.com/beelabhmc/pollen_id`
 2. Install [anaconda](https://www.anaconda.com/products/distribution)
 3. Create the conda environment: `conda env create -f environment.yml` (this must be done in the `pollen_id` directory)
+4. Install pytorch (see [here](https://pytorch.org/get-started/locally/)). This is not included in the `environment.yml` file because it is platform dependent.
+5. Activate the conda environment: `conda activate pollen_id`
 
 ### Data Setup & Processing
 1. Download all the pollen slide images from the google drive folder (they may download as multiple .zip files, you will need to unzip and combine them into one folder manually)
