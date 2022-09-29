@@ -15,6 +15,7 @@ dependencies:
   - tqdm=4.64.0
   - pillow=9.0.1
   - torchmetrics=0.9.3
+  - seaborn=0.11.2
   - pip:
     - opencv-contrib-python==4.6.0.66
 prefix: /Users/kavidey/.pyenv/versions/anaconda3-2022.05/envs/pollen_id
