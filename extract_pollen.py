@@ -1,5 +1,4 @@
 # %%
-import cmath
 import pandas as pd
 import numpy as np
 import pathlib
@@ -257,7 +256,7 @@ for group in tqdm(images_to_run_on, total=len(images_to_run_on)):
         all_contours_combined = all_contours
 
     for i, c in enumerate(all_contours_combined):
-        prefix = "train" if i < len(group[1]) * 0.8 else "test"
+        prefix = "train" if i >= np.ceil(len(group[1]) * 0.8) else "test"
         # TODO: Add slide id
         basePath = (
             pathlib.Path(pollen_grains_dir)
