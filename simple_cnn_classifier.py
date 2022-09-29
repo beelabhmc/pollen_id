@@ -204,8 +204,8 @@ for epoch in range(50):  # loop over the dataset multiple times
 
             tepoch.set_postfix(loss=loss.item(), accuracy=100.0 * accuracy.item())
 
-accuracy = metric.compute()
-print(f"Finished Training. Accuracy: {accuracy}")
+# accuracy = metric.compute()
+print(f"Finished Training")
 # %%
 combined_labels = []
 combined_predictions = []
@@ -224,7 +224,7 @@ with torch.no_grad():
 # %%
 metric.reset()
 accuracy = metric(torch.tensor(combined_predictions), torch.tensor(combined_labels))
-print("accuracy", accuracy)
+print("accuracy", accuracy.item())
 # %%
 # Confusion Matrix
 cf_matrix = confusion_matrix(combined_labels, combined_predictions)
@@ -238,5 +238,8 @@ plt.xlabel('predicted')
 plt.xlabel('true label')
 sn.heatmap(df_cm, annot=True)
 # %%
-precision_recall_fscore_support(np.array(combined_labels), np.array(combined_predictions))
+m = precision_recall_fscore_support(np.array(combined_labels), np.array(combined_predictions))
+print(f"precision: {m[0]} \n")
+print(f"recall: {m[1]} \n")
+print(f"f1 score: {m[2]} \n")
 # %%
