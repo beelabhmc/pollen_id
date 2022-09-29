@@ -5,7 +5,7 @@ import pathlib
 import re
 import logging
 import datetime
-
+import utils
 # %%
 # the local path to the folder with all the files in it
 data_dir = "pollen_slides"
@@ -25,8 +25,6 @@ database = {
 logging.basicConfig()
 logging.getLogger().setLevel(logging.INFO)
 ## %%
-
-img_suffixes = [".dng", ".jpg", ".jpeg", ".png"]
 match_date = re.compile(
     "\d{1,2}-\d{1,2}-\d{2}"
 )  # this regex matches dates in the format "mm-dd-yy"
@@ -34,7 +32,7 @@ match_date = re.compile(
 # Loop through all the images in the data folder
 for f in pathlib.Path(data_dir).glob("**/*.*"):
     # Filter for images
-    if f.suffix.lower() in img_suffixes:
+    if f.suffix.lower() in utils.img_suffixes:
         # Split the path into a list of folders
         folders = f.parent.parts
 

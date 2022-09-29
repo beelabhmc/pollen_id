@@ -1,6 +1,8 @@
 name: pollen_id
 channels:
   - defaults
+  - conda-forge
+  - anaconda
 dependencies:
   - python=3.8
   - pip
@@ -11,6 +13,8 @@ dependencies:
   - scikit-learn=1.1.1
   - scipy=1.7.3
   - tqdm=4.64.0
+  - pillow=9.0.1
+  - torchmetrics=0.9.3
   - pip:
     - opencv-contrib-python==4.6.0.66
 prefix: /Users/kavidey/.pyenv/versions/anaconda3-2022.05/envs/pollen_id
