@@ -79,10 +79,7 @@ images_to_run_on = (
 for species in images_to_run_on.groupby("species"):
     species_images = []
     for group in tqdm(
-        species[1].groupby(
-            ["image_location", "image_depth"]
-        ),  # TODO: Add slide ID to this groupby
-        total=len(species[1]),
+        species[1].groupby(["image_location", "date"]),  # TODO: Add slide ID to this groupby
         desc=f"Processing {species[0]}",
     ):
         all_contours = []
@@ -239,6 +236,8 @@ for species in images_to_run_on.groupby("species"):
                 # grid[i].imshow(thresholdImg)
                 grid[i].get_yaxis().set_ticks([])
                 grid[i].get_xaxis().set_ticks([])
+        
+        np.random.shuffle(all_contours)
 
         all_contours_combined = []
         images_in_group = [(p, cv.imread(p)) for p in group[1]["path"].values]
@@ -306,6 +305,7 @@ for species in images_to_run_on.groupby("species"):
                 images_at_this_location.append(
                     [
                         pollen_grain,
+                        j,
                         pathlib.Path(row["species"]) / row["image_location"] / str(i), # TODO: Add slide id
                     ]
                 )
@@ -320,11 +320,11 @@ for species in images_to_run_on.groupby("species"):
             prefix = "test"
         
         # Save all the images at this location into the correct folder
-        for img, path in species_images[i]:
+        for img, depth, path in species_images[i]:
             basePath = pathlib.Path(pollen_grains_dir) / prefix / path
             basePath.mkdir(parents=True, exist_ok=True)
             cv.imwrite(
-                str((basePath / f"{row['image_depth']}.png")),
+                str((basePath / f"{depth}.png")),
                 img,
             )
 # %%
