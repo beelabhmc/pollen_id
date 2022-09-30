@@ -33,7 +33,7 @@ image_res = 64
 train_transform = transforms.Compose(
     [
         transforms.Resize((image_res, image_res)),
-        transforms.TrivialAugmentWide(num_magnitude_bins=31),
+        # transforms.TrivialAugmentWide(num_magnitude_bins=31),
         transforms.ToTensor(),
         transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),  # mean = 0.5, std = 0.5
     ]
@@ -45,9 +45,10 @@ test_transform = transforms.Compose(
 # Loosely based on: https://www.learnpytorch.io/04_pytorch_custom_datasets/
 class PollenDataset(torch.utils.data.Dataset):
     def __init__(self, target_dir, transform=None):
+        super().__init__()
         self.paths = [
             f
-            for f in pathlib.Path(target_dir).glob("*/*.*")
+            for f in pathlib.Path(target_dir).glob("**/*.*")
             if f.suffix.lower() in utils.img_suffixes
         ]
         self.transform = transform
@@ -62,7 +63,7 @@ class PollenDataset(torch.utils.data.Dataset):
 
     def __getitem__(self, idx):
         img = self.load_image(idx)
-        class_name = self.paths[idx].parent.name
+        class_name = self.paths[idx].parents[2].name
         class_idx = self.class_to_idx[class_name]
 
         if self.transform:
@@ -72,17 +73,21 @@ class PollenDataset(torch.utils.data.Dataset):
 
 
 # %%
-full_pollen_dataset = PollenDataset(pollen_grains_dir)
+# full_pollen_dataset = PollenDataset(pollen_grains_dir)
 
-train_set_size = int(len(full_pollen_dataset) * 0.8)
-test_set_size = len(full_pollen_dataset) - train_set_size
+# train_set_size = int(len(full_pollen_dataset) * 0.8)
+# test_set_size = len(full_pollen_dataset) - train_set_size
 
-train_set, test_set = torch.utils.data.random_split(
-    full_pollen_dataset, [train_set_size, test_set_size]
-)
+# train_set, test_set = torch.utils.data.random_split(
+#     full_pollen_dataset, [train_set_size, test_set_size]
+# )
 
-train_set.dataset.transform = train_transform
-test_set.dataset.transform = test_transform
+# train_set.dataset.transform = train_transform
+# test_set.dataset.transform = test_transform
+train_set = PollenDataset(pollen_grains_dir / "train", transform=train_transform)
+test_set = PollenDataset(pollen_grains_dir / "test", transform=test_transform)
+
+classes = train_set.classes
 # %%
 train_loader = torch.utils.data.DataLoader(
     dataset=train_set,
@@ -116,7 +121,7 @@ imshow(torchvision.utils.make_grid(images))
 
 # print the class of the image
 print(
-    " ".join("%s" % full_pollen_dataset.classes[labels[j]] for j in range(BATCH_SIZE))
+    " ".join("%s" % classes[labels[j]] for j in range(BATCH_SIZE))
 )
 
 # %%
@@ -177,12 +182,12 @@ class TinyVGG(nn.Module):
 model = TinyVGG(
     input_shape=3,  # number of color channels (3 for RGB)
     hidden_units=10,
-    output_shape=len(full_pollen_dataset.classes),
+    output_shape=len(classes),
 ).to(device)
 
 criterion = nn.CrossEntropyLoss()
 optimizer = torch.optim.SGD(model.parameters(), lr=0.001, momentum=0.9)
-# optimizer = torch.optim.Adam(params=net.parameters(), lr=0.001)
+# optimizer = torch.optim.Adam(params=model.parameters(), lr=0.001)
 # %%
 metric = torchmetrics.Accuracy().to(device)
 
@@ -230,8 +235,8 @@ print("accuracy", accuracy.item())
 cf_matrix = confusion_matrix(combined_labels, combined_predictions)
 df_cm = pd.DataFrame(
     cf_matrix,
-    index=[i for i in full_pollen_dataset.classes],
-    columns=[i for i in full_pollen_dataset.classes],
+    index=[i for i in classes],
+    columns=[i for i in classes],
 )
 plt.figure(figsize=(12, 7))
 plt.xlabel('predicted')
