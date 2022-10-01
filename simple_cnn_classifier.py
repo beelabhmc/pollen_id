@@ -18,6 +18,7 @@ from tqdm.autonotebook import tqdm
 from sklearn.metrics import confusion_matrix, precision_recall_fscore_support
 import pandas as pd
 import seaborn as sn
+from collections import Counter
 
 # %%
 pollen_grains_dir = pathlib.Path("pollen_grains")
@@ -29,11 +30,11 @@ device = "cuda" if torch.cuda.is_available() else "cpu"
 BATCH_SIZE = 32
 NUM_WORKERS = 0  # os.cpu_count()
 # %%
-image_res = 64
+image_res = 256
 train_transform = transforms.Compose(
     [
         transforms.Resize((image_res, image_res)),
-        # transforms.TrivialAugmentWide(num_magnitude_bins=31),
+        transforms.TrivialAugmentWide(num_magnitude_bins=31),
         transforms.ToTensor(),
         transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),  # mean = 0.5, std = 0.5
     ]
@@ -44,15 +45,24 @@ test_transform = transforms.Compose(
 # %%
 # Loosely based on: https://www.learnpytorch.io/04_pytorch_custom_datasets/
 class PollenDataset(torch.utils.data.Dataset):
-    def __init__(self, target_dir, transform=None):
+    def __init__(self, target_dir, min_num=0, classes=[], transform=None):
         super().__init__()
-        self.paths = [
-            f
-            for f in pathlib.Path(target_dir).glob("**/*.*")
-            if f.suffix.lower() in utils.img_suffixes
-        ]
+        self.classes = []
+        self.paths = []
+        all_classes = sorted(
+            [dir.name for dir in os.scandir(target_dir) if dir.is_dir()]
+        )
+        for c in all_classes:
+            imgs = [
+                f
+                for f in (pathlib.Path(target_dir) / c).glob("**/*.*")
+                if f.suffix.lower() in utils.img_suffixes
+            ]
+            if len(imgs) >= min_num and ((classes and c in classes) or not classes):
+                self.classes.append(c)
+                self.paths.extend(imgs)
+        
         self.transform = transform
-        self.classes = sorted([dir.name for dir in os.scandir(target_dir)])
         self.class_to_idx = {classname: i for i, classname in enumerate(self.classes)}
 
     def load_image(self, idx):
@@ -73,21 +83,13 @@ class PollenDataset(torch.utils.data.Dataset):
 
 
 # %%
-# full_pollen_dataset = PollenDataset(pollen_grains_dir)
-
-# train_set_size = int(len(full_pollen_dataset) * 0.8)
-# test_set_size = len(full_pollen_dataset) - train_set_size
-
-# train_set, test_set = torch.utils.data.random_split(
-#     full_pollen_dataset, [train_set_size, test_set_size]
-# )
-
-# train_set.dataset.transform = train_transform
-# test_set.dataset.transform = test_transform
-train_set = PollenDataset(pollen_grains_dir / "train", transform=train_transform)
-test_set = PollenDataset(pollen_grains_dir / "test", transform=test_transform)
+train_set = PollenDataset(pollen_grains_dir / "train", min_num=50, transform=train_transform)
+test_set = PollenDataset(pollen_grains_dir / "test", classes=train_set.classes, transform=test_transform)
 
 classes = train_set.classes
+
+# print([ dict(Counter(train_set.dataset.targets))])
+
 # %%
 train_loader = torch.utils.data.DataLoader(
     dataset=train_set,
@@ -120,9 +122,7 @@ images, labels = dataiter.next()
 imshow(torchvision.utils.make_grid(images))
 
 # print the class of the image
-print(
-    " ".join("%s" % classes[labels[j]] for j in range(BATCH_SIZE))
-)
+print(" ".join("%s" % classes[labels[j]] for j in range(BATCH_SIZE)))
 
 # %%
 class TinyVGG(nn.Module):
@@ -179,15 +179,25 @@ class TinyVGG(nn.Module):
         # return self.classifier(self.conv_block_2(self.conv_block_1(x))) # <- leverage the benefits of operator fusion
 
 
-model = TinyVGG(
-    input_shape=3,  # number of color channels (3 for RGB)
-    hidden_units=10,
-    output_shape=len(classes),
-).to(device)
+# model = TinyVGG(
+#     input_shape=3,  # number of color channels (3 for RGB)
+#     hidden_units=10,
+#     output_shape=len(classes),
+# ).to(device)
+
+model = torchvision.models.resnet50(pretrained=True).to(device)
+    
+for param in model.parameters():
+    param.requires_grad = False   
+    
+model.fc = nn.Sequential(
+               nn.Linear(2048, 128),
+               nn.ReLU(inplace=True),
+               nn.Linear(128, len(classes))).to(device)
 
 criterion = nn.CrossEntropyLoss()
-optimizer = torch.optim.SGD(model.parameters(), lr=0.001, momentum=0.9)
-# optimizer = torch.optim.Adam(params=model.parameters(), lr=0.001)
+# optimizer = torch.optim.SGD(model.parameters(), lr=0.001, momentum=0.9)
+optimizer = torch.optim.Adam(params=model.parameters(), lr=0.001)
 # %%
 metric = torchmetrics.Accuracy().to(device)
 
@@ -239,11 +249,13 @@ df_cm = pd.DataFrame(
     columns=[i for i in classes],
 )
 plt.figure(figsize=(12, 7))
-plt.xlabel('predicted')
-plt.xlabel('true label')
+plt.xlabel("predicted")
+plt.xlabel("true label")
 sn.heatmap(df_cm, annot=True)
 # %%
-m = precision_recall_fscore_support(np.array(combined_labels), np.array(combined_predictions))
+m = precision_recall_fscore_support(
+    np.array(combined_labels), np.array(combined_predictions)
+)
 print(f"precision: {m[0]} \n")
 print(f"recall: {m[1]} \n")
 print(f"f1 score: {m[2]} \n")
