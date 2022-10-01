@@ -64,19 +64,26 @@ class PollenDataset(torch.utils.data.Dataset):
             if len(imgs) >= min_num and ((classes and c in classes) or not classes):
                 self.classes.append(c)
                 self.paths.extend(imgs)
-        
+
         self.transform = transform
         self.class_to_idx = {classname: i for i, classname in enumerate(self.classes)}
 
+        self.targets = [
+            self.class_to_idx[self.get_class_from_path(p)] for p in self.paths
+        ]
+
     def load_image(self, idx):
         return Image.open(self.paths[idx])
+
+    def get_class_from_path(self, path):
+        return path.parents[2].name
 
     def __len__(self):
         return len(self.paths)
 
     def __getitem__(self, idx):
         img = self.load_image(idx)
-        class_name = self.paths[idx].parents[2].name
+        class_name = self.get_class_from_path(self.paths[idx])
         class_idx = self.class_to_idx[class_name]
 
         if self.transform:
@@ -86,12 +93,17 @@ class PollenDataset(torch.utils.data.Dataset):
 
 
 # %%
-train_set = PollenDataset(pollen_grains_dir / "train", min_num=50, transform=train_transform)
-test_set = PollenDataset(pollen_grains_dir / "test", classes=train_set.classes, transform=test_transform)
+train_set = PollenDataset(
+    pollen_grains_dir / "train", min_num=50, transform=train_transform
+)
+test_set = PollenDataset(
+    pollen_grains_dir / "test", classes=train_set.classes, transform=test_transform
+)
 
 classes = train_set.classes
 
-# print([ dict(Counter(train_set.dataset.targets))])
+# Print how many of each class we have
+print(dict(zip(train_set.classes, dict(Counter(train_set.targets + test_set.targets)).values())))
 
 # %%
 train_loader = torch.utils.data.DataLoader(
@@ -126,17 +138,15 @@ imshow(torchvision.utils.make_grid(images))
 
 # print the class of the image
 print(" ".join("%s" % classes[labels[j]] for j in range(BATCH_SIZE)))
-
 # %%
 model = torchvision.models.resnet50(weights=torchvision.models.ResNet50_Weights.IMAGENET1K_V2).to(device)
     
 for param in model.parameters():
-    param.requires_grad = False   
-    
+    param.requires_grad = False
+
 model.fc = nn.Sequential(
-               nn.Linear(2048, 128),
-               nn.ReLU(inplace=True),
-               nn.Linear(128, len(classes))).to(device)
+    nn.Linear(2048, 128), nn.ReLU(inplace=True), nn.Linear(128, len(classes))
+).to(device)
 
 criterion = nn.CrossEntropyLoss()
 optimizer = torch.optim.SGD(model.parameters(), lr=0.001, momentum=0.9)
