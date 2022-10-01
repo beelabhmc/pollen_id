@@ -22,9 +22,10 @@ from collections import Counter
 
 # %%
 pollen_grains_dir = pathlib.Path("pollen_grains")
+
 model_save_dir = pathlib.Path("models")
 model_save_dir.mkdir(parents=True, exist_ok=True)
-
+model_name = "resnet50"
 
 torch.manual_seed(42)
 torch.cuda.manual_seed(42)
@@ -33,13 +34,13 @@ device = "cuda" if torch.cuda.is_available() else "cpu"
 BATCH_SIZE = 32
 NUM_WORKERS = 0  # os.cpu_count()
 # %%
-image_res = 256
+image_res = 224
 train_transform = transforms.Compose(
     [
         transforms.Resize((image_res, image_res)),
         transforms.TrivialAugmentWide(num_magnitude_bins=31),
         transforms.ToTensor(),
-        transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),  # mean = 0.5, std = 0.5
+        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
     ]
 )
 test_transform = transforms.Compose(
@@ -103,7 +104,14 @@ test_set = PollenDataset(
 classes = train_set.classes
 
 # Print how many of each class we have
-print(dict(zip(train_set.classes, dict(Counter(train_set.targets + test_set.targets)).values())))
+print(
+    dict(
+        zip(
+            train_set.classes,
+            dict(Counter(train_set.targets + test_set.targets)).values(),
+        )
+    )
+)
 
 # %%
 train_loader = torch.utils.data.DataLoader(
@@ -139,8 +147,10 @@ imshow(torchvision.utils.make_grid(images))
 # print the class of the image
 print(" ".join("%s" % classes[labels[j]] for j in range(BATCH_SIZE)))
 # %%
-model = torchvision.models.resnet50(weights=torchvision.models.ResNet50_Weights.IMAGENET1K_V2).to(device)
-    
+model = torchvision.models.resnet50(
+    weights=torchvision.models.ResNet50_Weights.IMAGENET1K_V2
+).to(device)
+
 for param in model.parameters():
     param.requires_grad = False
 
@@ -179,12 +189,13 @@ for epoch in range(50):
             tepoch.set_postfix(loss=loss.item(), accuracy=100.0 * accuracy.item())
             running_loss += loss.item()
             running_acc += accuracy.item()
-    torch.save(model.state_dict(), model_save_dir / f"resnet50.snapshot-epoch{epoch}.pth")
+    torch.save(
+        model.state_dict(), model_save_dir / f"{model_name}.snapshot-epoch{epoch}.pth"
+    )
 
     train_loss.append(running_loss / len(train_loader))
     train_acc.append(running_acc / len(train_loader))
-    
-    
+
     running_loss = 0
     running_acc = 0
     with torch.no_grad():
@@ -197,12 +208,12 @@ for epoch in range(50):
 
             running_loss += loss.item()
             running_acc += accuracy.item()
-    
+
     test_loss.append(running_loss / len(test_loader))
     test_acc.append(running_acc / len(test_loader))
 
 print(f"Finished Training")
-torch.save(model.state_dict(), model_save_dir / "resnet50.final.pth")
+torch.save(model.state_dict(), model_save_dir / f"{model_name}.final.pth")
 # %%
 fig = plt.figure(figsize=(10, 5))
 plt.subplot(1, 2, 1)
