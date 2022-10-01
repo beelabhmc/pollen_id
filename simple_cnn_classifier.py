@@ -22,6 +22,9 @@ from collections import Counter
 
 # %%
 pollen_grains_dir = pathlib.Path("pollen_grains")
+model_save_dir = pathlib.Path("models")
+model_save_dir.mkdir(parents=True, exist_ok=True)
+
 
 torch.manual_seed(42)
 torch.cuda.manual_seed(42)
@@ -125,67 +128,7 @@ imshow(torchvision.utils.make_grid(images))
 print(" ".join("%s" % classes[labels[j]] for j in range(BATCH_SIZE)))
 
 # %%
-class TinyVGG(nn.Module):
-    """
-    Model architecture copying TinyVGG from:
-    https://poloclub.github.io/cnn-explainer/
-    """
-
-    def __init__(self, input_shape: int, hidden_units: int, output_shape: int) -> None:
-        super().__init__()
-        self.conv_block_1 = nn.Sequential(
-            nn.Conv2d(
-                in_channels=input_shape,
-                out_channels=hidden_units,
-                kernel_size=3,  # how big is the square that's going over the image?
-                stride=1,  # default
-                padding=1,
-            ),  # options = "valid" (no padding) or "same" (output has same shape as input) or int for specific number
-            nn.ReLU(),
-            nn.Conv2d(
-                in_channels=hidden_units,
-                out_channels=hidden_units,
-                kernel_size=3,
-                stride=1,
-                padding=1,
-            ),
-            nn.ReLU(),
-            nn.MaxPool2d(
-                kernel_size=2, stride=2
-            ),  # default stride value is same as kernel_size
-        )
-        self.conv_block_2 = nn.Sequential(
-            nn.Conv2d(hidden_units, hidden_units, kernel_size=3, padding=1),
-            nn.ReLU(),
-            nn.Conv2d(hidden_units, hidden_units, kernel_size=3, padding=1),
-            nn.ReLU(),
-            nn.MaxPool2d(2),
-        )
-        self.classifier = nn.Sequential(
-            nn.Flatten(),
-            # Where did this in_features shape come from?
-            # It's because each layer of our network compresses and changes the shape of our inputs data.
-            nn.Linear(in_features=hidden_units * 16 * 16, out_features=output_shape),
-        )
-
-    def forward(self, x: torch.Tensor):
-        x = self.conv_block_1(x)
-        # print(x.shape)
-        x = self.conv_block_2(x)
-        # print(x.shape)
-        x = self.classifier(x)
-        # print(x.shape)
-        return x
-        # return self.classifier(self.conv_block_2(self.conv_block_1(x))) # <- leverage the benefits of operator fusion
-
-
-# model = TinyVGG(
-#     input_shape=3,  # number of color channels (3 for RGB)
-#     hidden_units=10,
-#     output_shape=len(classes),
-# ).to(device)
-
-model = torchvision.models.resnet50(pretrained=True).to(device)
+model = torchvision.models.resnet50(weights=torchvision.models.ResNet50_Weights.IMAGENET1K_V2).to(device)
     
 for param in model.parameters():
     param.requires_grad = False   
@@ -196,12 +139,19 @@ model.fc = nn.Sequential(
                nn.Linear(128, len(classes))).to(device)
 
 criterion = nn.CrossEntropyLoss()
-# optimizer = torch.optim.SGD(model.parameters(), lr=0.001, momentum=0.9)
-optimizer = torch.optim.Adam(params=model.parameters(), lr=0.001)
+optimizer = torch.optim.SGD(model.parameters(), lr=0.001, momentum=0.9)
+# optimizer = torch.optim.Adam(params=model.parameters(), lr=0.001)
 # %%
 metric = torchmetrics.Accuracy().to(device)
 
-for epoch in range(50):  # loop over the dataset multiple times
+train_loss = []
+train_acc = []
+test_loss = []
+test_acc = []
+
+for epoch in range(50):
+    running_loss = 0
+    running_acc = 0
     with tqdm(train_loader, unit="batch") as tepoch:
         for data, target in tepoch:
             tepoch.set_description(f"Epoch {epoch}")
@@ -209,18 +159,57 @@ for epoch in range(50):  # loop over the dataset multiple times
             data, target = data.to(device), target.to(device)
             optimizer.zero_grad()
             output = model(data)
-            predictions = output.argmax(dim=1, keepdim=True).squeeze()
-            # loss = F.nll_loss(output, target)
             loss = criterion(output, target)
+            predictions = output.argmax(dim=1, keepdim=True).squeeze()
             accuracy = metric(predictions, target)
 
             loss.backward()
             optimizer.step()
 
             tepoch.set_postfix(loss=loss.item(), accuracy=100.0 * accuracy.item())
+            running_loss += loss.item()
+            running_acc += accuracy.item()
+    torch.save(model.state_dict(), model_save_dir / f"resnet50.snapshot-epoch{epoch}.pth")
 
-# accuracy = metric.compute()
+    train_loss.append(running_loss / len(train_loader))
+    train_acc.append(running_acc / len(train_loader))
+    
+    
+    running_loss = 0
+    running_acc = 0
+    with torch.no_grad():
+        for data, target in test_loader:
+            data, target = data.to(device), target.to(device)
+            output = model(data)
+            loss = criterion(output, target)
+            predictions = output.argmax(dim=1, keepdim=True).squeeze()
+            accuracy = metric(predictions, target)
+
+            running_loss += loss.item()
+            running_acc += accuracy.item()
+    
+    test_loss.append(running_loss / len(test_loader))
+    test_acc.append(running_acc / len(test_loader))
+
 print(f"Finished Training")
+torch.save(model.state_dict(), model_save_dir / "resnet50.final.pth")
+# %%
+fig = plt.figure(figsize=(10, 5))
+plt.subplot(1, 2, 1)
+plt.plot(train_loss, label="train")
+plt.plot(test_loss, label="test")
+plt.title("Loss")
+
+plt.subplot(1, 2, 2)
+plt.plot(train_acc)
+plt.plot(test_acc)
+plt.title("Accuracy")
+
+lines_labels = [ax.get_legend_handles_labels() for ax in fig.axes]
+lines, labels = [sum(lol, []) for lol in zip(*lines_labels)]
+fig.legend(lines, labels)
+
+plt.show()
 # %%
 combined_labels = []
 combined_predictions = []
@@ -230,11 +219,11 @@ with torch.no_grad():
     for data in test_loader:
         images, labels = data[0].to(device), data[1].to(device)
         output = model(images)
-        output = (torch.max(torch.exp(output), 1)[1]).data.cpu().numpy()
+        predictions = output.argmax(dim=1, keepdim=True).squeeze()
 
         labels = labels.data.cpu().numpy()
         combined_labels.extend(labels)
-        combined_predictions.extend(output)
+        combined_predictions.extend(predictions)
 
 # %%
 metric.reset()

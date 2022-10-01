@@ -1,6 +1,9 @@
 # Ignore pollen images
 pollen_grains
 
+# Ignore trained models
+models
+
 # Python
 *.py[cod]
 
