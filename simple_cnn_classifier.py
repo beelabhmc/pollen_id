@@ -223,7 +223,7 @@ with torch.no_grad():
 
         labels = labels.data.cpu().numpy()
         combined_labels.extend(labels)
-        combined_predictions.extend(predictions)
+        combined_predictions.extend(list(predictions.cpu().numpy()))
 
 # %%
 metric.reset()
