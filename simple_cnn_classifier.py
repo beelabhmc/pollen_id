@@ -131,7 +131,7 @@ test_loader = torch.utils.data.DataLoader(
 
 def imshow(img):
     """function to show image"""
-    img = img / 2 + 0.5  # unnormalize
+    img = img / 4 + 0.5  # unnormalize
     npimg = img.numpy()  # convert to numpy objects
     plt.imshow(np.transpose(npimg, (1, 2, 0)))
     plt.show()
@@ -159,10 +159,11 @@ model.fc = nn.Sequential(
 ).to(device)
 
 criterion = nn.CrossEntropyLoss()
-optimizer = torch.optim.SGD(model.parameters(), lr=0.001, momentum=0.9)
+# optimizer = torch.optim.SGD(model.parameters(), lr=0.001, momentum=0.9)
 # optimizer = torch.optim.Adam(params=model.parameters(), lr=0.001)
+optimizer = torch.optim.RAdam(params=model.parameters(), lr=0.001)
 # %%
-metric = torchmetrics.Accuracy().to(device)
+metric = torchmetrics.Accuracy(num_classes=len(classes)).to(device)
 
 train_loss = []
 train_acc = []
@@ -172,6 +173,7 @@ test_acc = []
 for epoch in range(50):
     running_loss = 0
     running_acc = 0
+    model.train()
     with tqdm(train_loader, unit="batch") as tepoch:
         for data, target in tepoch:
             tepoch.set_description(f"Epoch {epoch}")
@@ -181,6 +183,7 @@ for epoch in range(50):
             output = model(data)
             loss = criterion(output, target)
             predictions = output.argmax(dim=1, keepdim=True).squeeze()
+            metric.reset()
             accuracy = metric(predictions, target)
 
             loss.backward()
@@ -198,12 +201,14 @@ for epoch in range(50):
 
     running_loss = 0
     running_acc = 0
+    model.eval()
     with torch.no_grad():
         for data, target in test_loader:
             data, target = data.to(device), target.to(device)
             output = model(data)
             loss = criterion(output, target)
             predictions = output.argmax(dim=1, keepdim=True).squeeze()
+            metric.reset()
             accuracy = metric(predictions, target)
 
             running_loss += loss.item()
@@ -262,7 +267,7 @@ plt.figure(figsize=(12, 7))
 plt.xlabel("predicted")
 plt.xlabel("true label")
 sn.heatmap(df_cm, annot=True)
-# %%
+ # %%
 m = precision_recall_fscore_support(
     np.array(combined_labels), np.array(combined_predictions)
 )
