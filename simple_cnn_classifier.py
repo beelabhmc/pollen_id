@@ -25,7 +25,7 @@ pollen_grains_dir = pathlib.Path("pollen_grains")
 
 model_save_dir = pathlib.Path("models")
 model_save_dir.mkdir(parents=True, exist_ok=True)
-model_name = "resnet50"
+model_name = "resnet50_not_pretrained"
 
 torch.manual_seed(42)
 torch.cuda.manual_seed(42)
@@ -95,7 +95,7 @@ class PollenDataset(torch.utils.data.Dataset):
 
 # %%
 train_set = PollenDataset(
-    pollen_grains_dir / "train", min_num=50, transform=train_transform
+    pollen_grains_dir / "train", min_num=0, transform=train_transform
 )
 test_set = PollenDataset(
     pollen_grains_dir / "test", classes=train_set.classes, transform=test_transform
@@ -165,12 +165,33 @@ optimizer = torch.optim.RAdam(params=model.parameters(), lr=0.001)
 # %%
 metric = torchmetrics.Accuracy(num_classes=len(classes)).to(device)
 
+# From: https://stackoverflow.com/a/73704579
+class EarlyStopper:
+    def __init__(self, patience=1, min_delta=0):
+        self.patience = patience
+        self.min_delta = min_delta
+        self.counter = 0
+        self.min_validation_loss = np.inf
+
+    def early_stop(self, validation_loss):
+        if validation_loss < self.min_validation_loss:
+            self.min_validation_loss = validation_loss
+            self.counter = 0
+        elif validation_loss > (self.min_validation_loss + self.min_delta):
+            self.counter += 1
+            if self.counter >= self.patience:
+                return True
+        return False
+
+
 train_loss = []
 train_acc = []
 test_loss = []
 test_acc = []
 
-for epoch in range(50):
+early_stopper = EarlyStopper(patience=3, min_delta=0.2)
+
+for epoch in range(250):
     running_loss = 0
     running_acc = 0
     model.train()
@@ -216,6 +237,9 @@ for epoch in range(50):
 
     test_loss.append(running_loss / len(test_loader))
     test_acc.append(running_acc / len(test_loader))
+
+    if early_stopper.early_stop(test_loss[-1]):             
+        break
 
 print(f"Finished Training")
 torch.save(model.state_dict(), model_save_dir / f"{model_name}.final.pth")
