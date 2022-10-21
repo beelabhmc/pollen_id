@@ -20,12 +20,13 @@ import pandas as pd
 import seaborn as sn
 from collections import Counter
 
+
 # %%
 pollen_grains_dir = pathlib.Path("pollen_grains")
 
 model_save_dir = pathlib.Path("models")
 model_save_dir.mkdir(parents=True, exist_ok=True)
-model_name = "resnet50_not_pretrained"
+model_name = "resnet50_with_context"
 
 torch.manual_seed(42)
 torch.cuda.manual_seed(42)
@@ -44,7 +45,11 @@ train_transform = transforms.Compose(
     ]
 )
 test_transform = transforms.Compose(
-    [transforms.Resize((image_res, image_res)), transforms.ToTensor()]
+    [
+        transforms.Resize((image_res, image_res)),
+        transforms.ToTensor(),
+        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+    ]
 )
 # %%
 # Loosely based on: https://www.learnpytorch.io/04_pytorch_custom_datasets/
@@ -87,15 +92,18 @@ class PollenDataset(torch.utils.data.Dataset):
         class_name = self.get_class_from_path(self.paths[idx])
         class_idx = self.class_to_idx[class_name]
 
+        # [image size]
+        contextual_features = torch.tensor([img.size[0] / image_res])
+
         if self.transform:
-            return self.transform(img), class_idx
+            return self.transform(img), contextual_features, class_idx
         else:
-            return img, class_idx
+            return img, contextual_features, class_idx
 
 
 # %%
 train_set = PollenDataset(
-    pollen_grains_dir / "train", min_num=0, transform=train_transform
+    pollen_grains_dir / "train", min_num=10, transform=train_transform
 )
 test_set = PollenDataset(
     pollen_grains_dir / "test", classes=train_set.classes, transform=test_transform
@@ -139,7 +147,7 @@ def imshow(img):
 
 # get random training images with iter function
 dataiter = iter(train_loader)
-images, labels = dataiter.next()
+images, context, labels = dataiter.next()
 
 # call function on our images
 imshow(torchvision.utils.make_grid(images))
@@ -147,16 +155,47 @@ imshow(torchvision.utils.make_grid(images))
 # print the class of the image
 print(" ".join("%s" % classes[labels[j]] for j in range(BATCH_SIZE)))
 # %%
-model = torchvision.models.resnet50(
+class Identity(nn.Module):
+    def __init__(self):
+        super(Identity, self).__init__()
+
+    def forward(self, x):
+        return x
+
+
+resnet_model = torchvision.models.resnet50(
     weights=torchvision.models.ResNet50_Weights.IMAGENET1K_V2
 ).to(device)
-
-for param in model.parameters():
+resnet_model.fc = Identity()
+# output = resnet_model(x) # Size: (1, 2048)
+for param in resnet_model.parameters():
     param.requires_grad = False
+resnet_model.eval()
 
-model.fc = nn.Sequential(
-    nn.Linear(2048, 128), nn.ReLU(inplace=True), nn.Linear(128, len(classes))
-).to(device)
+class Network(nn.Module):
+    def __init__(self, image_features):
+        super().__init__()
+
+        self.image_features = image_features
+
+        # TODO: Research if there are better fc layer setups
+        self.combined_layers = nn.Sequential(
+            nn.Linear(2048 + 1, 1024), # the number of neurons in the first layer should be 2048 (# of resnet features) + (# of context features)
+            nn.ReLU(),
+            nn.Linear(1024, 128),
+            nn.ReLU(),
+            nn.Linear(128, len(classes)),
+        )
+
+    def forward(self, x1, x2):
+        x1 = self.image_features(x1)
+        x = torch.cat((x1, x2), 1)
+        x = self.combined_layers(x)
+        x = torch.sigmoid(x)
+        return x
+
+
+model = Network(resnet_model).to(device)
 
 criterion = nn.CrossEntropyLoss()
 # optimizer = torch.optim.SGD(model.parameters(), lr=0.001, momentum=0.9)
@@ -196,12 +235,12 @@ for epoch in range(250):
     running_acc = 0
     model.train()
     with tqdm(train_loader, unit="batch") as tepoch:
-        for data, target in tepoch:
+        for images, context, target in tepoch:
             tepoch.set_description(f"Epoch {epoch}")
 
-            data, target = data.to(device), target.to(device)
+            images, context, target = images.to(device), context.to(device), target.to(device)
             optimizer.zero_grad()
-            output = model(data)
+            output = model(images, context)
             loss = criterion(output, target)
             predictions = output.argmax(dim=1, keepdim=True).squeeze()
             metric.reset()
@@ -224,9 +263,9 @@ for epoch in range(250):
     running_acc = 0
     model.eval()
     with torch.no_grad():
-        for data, target in test_loader:
-            data, target = data.to(device), target.to(device)
-            output = model(data)
+        for images, context, target in test_loader:
+            images, context, target = images.to(device), context.to(device), target.to(device)
+            output = model(images, context)
             loss = criterion(output, target)
             predictions = output.argmax(dim=1, keepdim=True).squeeze()
             metric.reset()
@@ -238,7 +277,7 @@ for epoch in range(250):
     test_loss.append(running_loss / len(test_loader))
     test_acc.append(running_acc / len(test_loader))
 
-    if early_stopper.early_stop(test_loss[-1]):             
+    if early_stopper.early_stop(test_loss[-1]):
         break
 
 print(f"Finished Training")
@@ -267,8 +306,8 @@ combined_predictions = []
 model.eval()
 with torch.no_grad():
     for data in test_loader:
-        images, labels = data[0].to(device), data[1].to(device)
-        output = model(images)
+        images, context, labels = data[0].to(device), data[1].to(device), data[2].to(device)
+        output = model(images, context)
         predictions = output.argmax(dim=1, keepdim=True).squeeze()
 
         labels = labels.data.cpu().numpy()
@@ -288,10 +327,12 @@ df_cm = pd.DataFrame(
     columns=[i for i in classes],
 )
 plt.figure(figsize=(12, 7))
-plt.xlabel("predicted")
-plt.xlabel("true label")
-sn.heatmap(df_cm, annot=True)
- # %%
+# plt.xlabel("predicted")
+# plt.ylabel("true label")
+ax = sn.heatmap(df_cm, annot=True)
+ax.set(xlabel='predicted', ylabel='true')
+plt.show()
+# %%
 m = precision_recall_fscore_support(
     np.array(combined_labels), np.array(combined_predictions)
 )
