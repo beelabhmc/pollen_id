@@ -16,7 +16,7 @@ database = {
     "species": [],
     "date": [],  # the date the image was captured
     "path": [],  # the local path to the image,
-    # "slide_id": [],
+    "slide_id": [],
     "image_location": [],
     "image_depth": [],
     "image_magnification": [],
@@ -57,7 +57,7 @@ for f in pathlib.Path(data_dir).glob("**/*.*"):
             database["path"].append(str(f))
 
             # If the image is older than 2019, it has a different naming convention
-            if processed_date.date() < datetime.date(2019, 1, 1):
+            if processed_date.date() < datetime.date(year=2019, month=1, day=1):
                 # Make sure the image name is in the expected format
                 # A few images have a different naming convention (ex: CF071515 10X.JPG)
                 # But these are also a weird color, so I think its okay to ignore them
@@ -72,15 +72,26 @@ for f in pathlib.Path(data_dir).glob("**/*.*"):
                 except:
                     database["image_depth"].append('')
                 # Multiply magnification by 10 to match with post-2019 images
-                database["image_magnification"].append(int(name_segments[1][:2]) * 10)
+                database["image_magnification"].append(int(name_segments[1][:2]))
                 database["herbarium_specimen_id"].append("")
-            else:
+                database["slide_id"].append("S0")
+            # Pre Oct 20th, 2022 (same as after that date but it doesn't include the slide ID and magnification is multiplied by 10)
+            elif processed_date.date() < datetime.date(year=2022, month=10, day=20):
                 name_segments = f.stem.split("_")
-                assert len(name_segments) == 6, ("warn", f"Invalid name for post-2019 image '{f.name}'")
+                assert len(name_segments) == 6, ("warn", f"Invalid name for post-2019 pre-oct-2022 image '{f.name}'")
                 database["image_location"].append(name_segments[4][:2])
                 database["image_depth"].append(name_segments[4][2])
-                database["image_magnification"].append(int(name_segments[3][3:6]))
+                database["image_magnification"].append(int(name_segments[3][3:6]) / 10)
                 database["herbarium_specimen_id"].append(int(name_segments[0]))
+                database["slide_id"].append("S0")
+            else:
+                name_segments = f.stem.split("_")
+                assert len(name_segments) == 6, ("warn", f"Invalid name for post-oct-2022 image '{f.name}'")
+                database["image_location"].append(name_segments[5][:2])
+                database["image_depth"].append(name_segments[5][2])
+                database["image_magnification"].append(int(name_segments[4][:2]))
+                database["herbarium_specimen_id"].append(int(name_segments[1]))
+                database["slide_id"].append(name_segments[0])
         except AssertionError as e:
             logging_level = e.args[0][0]
             logging_message = e.args[0][1]
