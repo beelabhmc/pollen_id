@@ -44,8 +44,8 @@ def filterOutSaltPepperNoise(edgeImg):
 
 # %%
 # Filter out any 100x images
-pollen_slides_400x_filtered_df = pollen_slides_df[
-    pollen_slides_df["image_magnification"] == 400
+pollen_slides_40x_filtered_df = pollen_slides_df[
+    pollen_slides_df["image_magnification"] == 40
 ]
 
 # If we're not running on all the images, setup graphing code
@@ -60,7 +60,7 @@ if not run_on_full_dataset:
 
     np.random.seed(3)
     chosen_idx = np.random.choice(
-        pollen_slides_400x_filtered_df.shape[0], replace=False, size=dim * dim
+        pollen_slides_40x_filtered_df.shape[0], replace=False, size=dim * dim
     )
 
 # how much to scale images down by for detection (if this number is changed the algorithm will need to be re-tuned)
@@ -69,9 +69,9 @@ img_downscale = 5
 edge_detector = cv.ximgproc.createStructuredEdgeDetection("model.yml")
 
 images_to_run_on = (
-    pollen_slides_400x_filtered_df  # normally loop through all images
+    pollen_slides_40x_filtered_df  # normally loop through all images
     if run_on_full_dataset  # unless the user said to run on a subset (for testing)
-    else pollen_slides_400x_filtered_df.iloc[chosen_idx]
+    else pollen_slides_40x_filtered_df.iloc[chosen_idx]
 )
 
 # %%
