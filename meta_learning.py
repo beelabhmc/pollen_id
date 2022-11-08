@@ -16,7 +16,7 @@ import torchvision.transforms as transforms
 import random
 
 from tqdm.autonotebook import tqdm
-from sklearn.metrics import confusion_matrix, precision_recall_fscore_support
+from sklearn.metrics import confusion_matrix, precision_recall_fscore_support, accuracy_score
 import pandas as pd
 import seaborn as sn
 from collections import Counter
@@ -27,7 +27,7 @@ pollen_grains_dir = pathlib.Path("pollen_grains")
 
 model_save_dir = pathlib.Path("models")
 model_save_dir.mkdir(parents=True, exist_ok=True)
-model_name = "resnet50_with_context"
+model_name = "siamese_net"
 
 torch.manual_seed(42)
 torch.cuda.manual_seed(42)
@@ -261,7 +261,7 @@ criterion = nn.MSELoss()
 # optimizer = torch.optim.Adam(params=model.parameters(), lr=0.001)
 optimizer = torch.optim.RAdam(params=model.parameters(), lr=0.001)
 # %%
-metric = torchmetrics.Accuracy(num_classes=len(classes)).to(device)
+metric = torchmetrics.Accuracy(num_classes=2).to(device)
 
 # From: https://stackoverflow.com/a/73704579
 class EarlyStopper:
@@ -289,7 +289,7 @@ test_acc = []
 
 early_stopper = EarlyStopper(patience=3, min_delta=0.2)
 
-for epoch in range(250):
+for epoch in range(500):
     running_loss = 0
     running_acc = 0
     model.train()
@@ -305,9 +305,8 @@ for epoch in range(250):
             optimizer.zero_grad()
             output = model(img1, img2)
             loss = criterion(output, target)
-            predictions = output.argmax(dim=1, keepdim=True).squeeze()
             metric.reset()
-            accuracy = metric(predictions, torch.squeeze(target.to(torch.int64)))
+            accuracy = metric(torch.squeeze(output.to(torch.int64)), torch.squeeze(target.to(torch.int64)))
 
             loss.backward()
             optimizer.step()
@@ -315,9 +314,11 @@ for epoch in range(250):
             tepoch.set_postfix(loss=loss.item(), accuracy=100.0 * accuracy.item())
             running_loss += loss.item()
             running_acc += accuracy.item()
-    # torch.save(
-    #     model.state_dict(), model_save_dir / f"{model_name}.snapshot-epoch{epoch}.pth"
-    # )
+
+    if epoch % 10 == 0:
+        torch.save(
+            model.state_dict(), model_save_dir / f"{model_name}.snapshot-epoch{epoch}.pth"
+        )
 
     train_loss.append(running_loss / len(train_loader))
     train_acc.append(running_acc / len(train_loader))
@@ -335,9 +336,8 @@ for epoch in range(250):
 
             output = model(img1, img2)
             loss = criterion(output, target)
-            predictions = output.argmax(dim=1, keepdim=True).squeeze()
             metric.reset()
-            accuracy = metric(predictions, torch.squeeze(target.to(torch.int64)))
+            accuracy = metric(torch.squeeze(output.to(torch.int64)), torch.squeeze(target.to(torch.int64)))
 
             running_loss += loss.item()
             running_acc += accuracy.item()
@@ -371,24 +371,43 @@ plt.show()
 combined_labels = []
 combined_predictions = []
 
+all_class_ref_imgs = [[] for _ in range(len(classes))]
+
+# this is inefficient, but it works
+all_images = list(range(len(test_set)))
+random.shuffle(all_images)
+for i in all_images:
+    img_idx, contextual_features, img_cls = test_set[i]
+    if len(all_class_ref_imgs[img_cls]) < 5:
+        img = test_set.load_image(img_idx)
+        if test_set.transform:
+            img = test_set.transform(img)
+        all_class_ref_imgs[img_cls].append(img)
+
 model.eval()
 with torch.no_grad():
-    for data in test_loader:
-        images, context, labels = (
-            data[0].to(device),
-            data[1].to(device),
-            data[2].to(device),
-        )
-        output = model(images, context)
-        predictions = output.argmax(dim=1, keepdim=True).squeeze()
+    with tqdm(test_set, unit="batch") as tqdm_test_set:
+        for img_idx, contextual_features, img_cls in tqdm_test_set:
+            img = test_set.load_image(img_idx)
+            if test_set.transform:
+                img = test_set.transform(img)
+            img = img.to(device)
+            contextual_features = contextual_features.to(device)
 
-        labels = labels.data.cpu().numpy()
-        combined_labels.extend(labels)
-        combined_predictions.extend(list(predictions.cpu().numpy()))
+            dist_to_all_classes = []
+            for cls_imgs in all_class_ref_imgs:
+                imgs0 = torch.stack([img]*len(cls_imgs)).to(device)
+                imgs1 = torch.stack(cls_imgs).to(device)
+
+                output = model(imgs0, imgs1)
+                dist_to_all_classes.append(np.mean(output.cpu().detach().flatten().tolist()))
+
+            prediction = np.argmin(dist_to_all_classes)
+            combined_labels.append(img_cls)
+            combined_predictions.append(prediction)
 
 # %%
-metric.reset()
-accuracy = metric(torch.tensor(combined_predictions), torch.tensor(combined_labels))
+accuracy = accuracy_score(combined_labels, combined_predictions)
 print("accuracy", accuracy.item())
 # %%
 # Confusion Matrix
