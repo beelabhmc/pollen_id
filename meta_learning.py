@@ -13,6 +13,7 @@ import os
 import utils
 from PIL import Image
 import torchvision.transforms as transforms
+import random
 
 from tqdm.autonotebook import tqdm
 from sklearn.metrics import confusion_matrix, precision_recall_fscore_support
@@ -88,17 +89,62 @@ class PollenDataset(torch.utils.data.Dataset):
         return len(self.paths)
 
     def __getitem__(self, idx):
-        img = self.load_image(idx)
+        # img = self.load_image(idx)
         class_name = self.get_class_from_path(self.paths[idx])
         class_idx = self.class_to_idx[class_name]
 
         # [image size]
-        contextual_features = torch.tensor([img.size[0] / image_res])
+        # contextual_features = torch.tensor([img.size[0] / image_res])
+        contextual_features = torch.tensor([0.0])
 
-        if self.transform:
-            return self.transform(img), contextual_features, class_idx
+        # if self.transform:
+        #     return self.transform(img), contextual_features, class_idx
+        # else:
+        #     return img, contextual_features, class_idx
+        return idx, contextual_features, class_idx
+
+
+# Modified from: https://datahacker.rs/019-siamese-network-in-pytorch-with-application-to-face-similarity/
+class SiameseNetworkDataset(torch.utils.data.Dataset):
+    def __init__(self, dataset):
+        self.dataset = dataset
+
+    def __getitem__(self, index):
+        # img0_tuple = random.choice(self.dataset)
+        img0_tuple = self.dataset[index]
+
+        # We need to approximately 50% of images to be in the same class
+        should_get_same_class = random.randint(0, 1)
+        if should_get_same_class:
+            while True:
+                # Look until the same class image is found
+                img1_tuple = random.choice(self.dataset)
+                if img0_tuple[2] == img1_tuple[2]:
+                    break
         else:
-            return img, contextual_features, class_idx
+
+            while True:
+                # Look until a different class image is found
+                img1_tuple = random.choice(self.dataset)
+                if img0_tuple[2] != img1_tuple[2]:
+                    break
+        
+        img0 = self.dataset.load_image(img0_tuple[0])
+        img1 = self.dataset.load_image(img1_tuple[0])
+        if self.dataset.transform:
+            img0 = self.dataset.transform(img0)
+            img1 = self.dataset.transform(img1)
+
+        return (
+            [img0, img0_tuple[1]],
+            [img1, img1_tuple[1]],
+            torch.from_numpy(
+                np.array([int(img1_tuple[2] != img0_tuple[2])], dtype=np.float32)
+            ),
+        )
+
+    def __len__(self):
+        return len(self.dataset)
 
 
 # %%
@@ -123,37 +169,37 @@ print(
 
 # %%
 train_loader = torch.utils.data.DataLoader(
-    dataset=train_set,
+    dataset=SiameseNetworkDataset(train_set),
     batch_size=BATCH_SIZE,
     num_workers=NUM_WORKERS,
     shuffle=True,
 )
 
 test_loader = torch.utils.data.DataLoader(
-    dataset=test_set,
+    dataset=SiameseNetworkDataset(test_set),
     batch_size=BATCH_SIZE,
     num_workers=NUM_WORKERS,
     shuffle=False,
 )
 
 
-def imshow(img):
-    """function to show image"""
-    img = img / 4 + 0.5  # unnormalize
-    npimg = img.numpy()  # convert to numpy objects
-    plt.imshow(np.transpose(npimg, (1, 2, 0)))
-    plt.show()
+# def imshow(img):
+#     """function to show image"""
+#     img = img / 4 + 0.5  # unnormalize
+#     npimg = img.numpy()  # convert to numpy objects
+#     plt.imshow(np.transpose(npimg, (1, 2, 0)))
+#     plt.show()
 
 
-# get random training images with iter function
-dataiter = iter(train_loader)
-images, context, labels = dataiter.next()
+# # get random training images with iter function
+# dataiter = iter(train_loader)
+# images, context, labels = dataiter.next()
 
-# call function on our images
-imshow(torchvision.utils.make_grid(images))
+# # call function on our images
+# imshow(torchvision.utils.make_grid(images))
 
-# print the class of the image
-print(" ".join("%s" % classes[labels[j]] for j in range(BATCH_SIZE)))
+# # print the class of the image
+# print(" ".join("%s" % classes[labels[j]] for j in range(BATCH_SIZE)))
 # %%
 class Identity(nn.Module):
     def __init__(self):
@@ -172,32 +218,45 @@ for param in resnet_model.parameters():
     param.requires_grad = False
 resnet_model.eval()
 
+
 class Network(nn.Module):
     def __init__(self, image_features):
         super().__init__()
 
         self.image_features = image_features
 
-        # TODO: Research if there are better fc layer setups
+        self.feature_vector_length = 128
+
         self.combined_layers = nn.Sequential(
-            nn.Linear(2048 + 1, 1024), # the number of neurons in the first layer should be 2048 (# of resnet features) + (# of context features)
-            nn.ReLU(),
-            nn.Linear(1024, 128),
-            nn.ReLU(),
-            nn.Linear(128, len(classes)),
+            nn.Linear(2048, 1024),
+            nn.ReLU(inplace=True),
+            nn.Linear(1024, self.feature_vector_length),
         )
 
-    def forward(self, x1, x2):
-        x1 = self.image_features(x1)
-        x = torch.cat((x1, x2), 1)
-        x = self.combined_layers(x)
-        x = torch.sigmoid(x)
-        return x
+        self.fc = nn.Sequential(
+            nn.Linear(self.feature_vector_length * 2, 128),
+            nn.ReLU(inplace=True),
+            nn.Linear(128, 1),
+        )
+
+    def forward_once(self, x):
+        output = self.image_features(x)
+        output = self.combined_layers(output)
+        return output
+
+    def forward(self, input1, input2):
+        output1 = self.forward_once(input1)
+        output2 = self.forward_once(input2)
+
+        output = torch.concat((output1, output2), 1)
+        output = self.fc(output)
+        output = torch.sigmoid(output)
+        return output
 
 
 model = Network(resnet_model).to(device)
 
-criterion = nn.CrossEntropyLoss()
+criterion = nn.MSELoss()
 # optimizer = torch.optim.SGD(model.parameters(), lr=0.001, momentum=0.9)
 # optimizer = torch.optim.Adam(params=model.parameters(), lr=0.001)
 optimizer = torch.optim.RAdam(params=model.parameters(), lr=0.001)
@@ -207,7 +266,7 @@ metric = torchmetrics.Accuracy(num_classes=len(classes)).to(device)
 # From: https://stackoverflow.com/a/73704579
 class EarlyStopper:
     def __init__(self, patience=1, min_delta=0):
-        self.patience = patience
+        self.patience = patience 
         self.min_delta = min_delta
         self.counter = 0
         self.min_validation_loss = np.inf
@@ -235,16 +294,20 @@ for epoch in range(250):
     running_acc = 0
     model.train()
     with tqdm(train_loader, unit="batch") as tepoch:
-        for images, context, target in tepoch:
+        for data1, data2, target in tepoch:
             tepoch.set_description(f"Epoch {epoch}")
 
-            images, context, target = images.to(device), context.to(device), target.to(device)
+            img1, img2, target = (
+                data1[0].to(device),
+                data2[0].to(device),
+                target.to(device),
+            )
             optimizer.zero_grad()
-            output = model(images, context)
+            output = model(img1, img2)
             loss = criterion(output, target)
             predictions = output.argmax(dim=1, keepdim=True).squeeze()
             metric.reset()
-            accuracy = metric(predictions, target)
+            accuracy = metric(predictions, torch.squeeze(target.to(torch.int64)))
 
             loss.backward()
             optimizer.step()
@@ -263,13 +326,18 @@ for epoch in range(250):
     running_acc = 0
     model.eval()
     with torch.no_grad():
-        for images, context, target in test_loader:
-            images, context, target = images.to(device), context.to(device), target.to(device)
-            output = model(images, context)
+        for data1, data2, target in test_loader:
+            img1, img2, target = (
+                data1[0].to(device),
+                data2[0].to(device),
+                target.to(device),
+            )
+
+            output = model(img1, img2)
             loss = criterion(output, target)
             predictions = output.argmax(dim=1, keepdim=True).squeeze()
             metric.reset()
-            accuracy = metric(predictions, target)
+            accuracy = metric(predictions, torch.squeeze(target.to(torch.int64)))
 
             running_loss += loss.item()
             running_acc += accuracy.item()
@@ -306,7 +374,11 @@ combined_predictions = []
 model.eval()
 with torch.no_grad():
     for data in test_loader:
-        images, context, labels = data[0].to(device), data[1].to(device), data[2].to(device)
+        images, context, labels = (
+            data[0].to(device),
+            data[1].to(device),
+            data[2].to(device),
+        )
         output = model(images, context)
         predictions = output.argmax(dim=1, keepdim=True).squeeze()
 
@@ -330,7 +402,7 @@ plt.figure(figsize=(12, 7))
 # plt.xlabel("predicted")
 # plt.ylabel("true label")
 ax = sn.heatmap(df_cm, annot=True)
-ax.set(xlabel='predicted', ylabel='true')
+ax.set(xlabel="predicted", ylabel="true")
 plt.show()
 # %%
 m = precision_recall_fscore_support(
