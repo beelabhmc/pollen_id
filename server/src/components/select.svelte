@@ -83,7 +83,7 @@
 		<Column sm={1} md={4} lg={8}>
 			<ProgressBar
 				value={automaticPollenSelectionStatus}
-				helperText={`${1} out of ${images.length} images `}
+				helperText={`${images.length == 0 ? 0 : Math.round((automaticPollenSelectionStatus / 100) * images.length)} out of ${images.length} images `}
 			/>
 		</Column>
 	</Row>
