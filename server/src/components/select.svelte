@@ -8,9 +8,16 @@
 		pollen: { box: { x: number; y: number; w: number; h: number } }[];
 	}[] = [];
 
-	let selectedIndex = 0;
+	let image_dimensions: {width: number, height: number}[] = [];
+	images.forEach((image) => {
+		image_dimensions.push({
+			width: image.img.width,
+			height: image.img.height,
+		});
+	});
 
-    console.log(images[selectedIndex].img.width, images[selectedIndex].img.height);
+	let selectedIndex = 0;
+	$: selectedImage = images[selectedIndex];
 
 	let annotationState: 'idle' | 'drawing' = 'idle';
 	let selectedBoxIdx: number | null = null;
@@ -23,9 +30,7 @@
 	on:keydown={(e) => {
 		if (e.key === 'Backspace') {
 			if (selectedBoxIdx !== null) {
-				images[selectedIndex].pollen = images[selectedIndex].pollen.filter(
-					(_, idx) => idx !== selectedBoxIdx
-				);
+				selectedImage.pollen = selectedImage.pollen.filter((_, idx) => idx !== selectedBoxIdx);
 				selectedBoxIdx = null;
 			}
 		}
@@ -38,14 +43,17 @@
 			<Tile>
 				<div class="img-overlay-wrap">
 					<img
-						bind:this={images[selectedIndex].img}
-						src={images[selectedIndex].img.src}
+						bind:this={selectedImage.img}
+						src={selectedImage.img.src}
 						style="width: 100%;"
-						alt={images[selectedIndex].name}
+						alt={selectedImage.name}
 					/>
 					<svg
 						bind:this={svgRef}
-						viewBox={'0 0 ' + images[selectedIndex].img.width + ' ' + images[selectedIndex].img.height}
+						viewBox={(() => {
+							const { width, height } = image_dimensions[selectedIndex];
+							return `0 0 ${width} ${height}`;
+						})()}
 						id="draw"
 						xmlns="http://www.w3.org/2000/svg"
 						style="width: 100%;"
@@ -54,8 +62,8 @@
 								annotationState = 'drawing';
 								let svgDim = svgRef.getBoundingClientRect();
 								box = {
-									x: (e.offsetX / svgDim.width) * images[selectedIndex].img.width,
-									y: (e.offsetY / svgDim.height) * images[selectedIndex].img.height,
+									x: (e.offsetX / svgDim.width) * image_dimensions[selectedIndex].width,
+									y: (e.offsetY / svgDim.height) * image_dimensions[selectedIndex].height,
 									w: 0,
 									h: 0
 								};
@@ -66,9 +74,9 @@
 						on:mousemove={(e) => {
 							if (annotationState === 'drawing') {
 								if (box) {
-                                    let svgDim = svgRef.getBoundingClientRect();
-									let widthScaleFactor = svgDim.width / images[selectedIndex].img.width;
-									let heightScaleFactor = svgDim.height / images[selectedIndex].img.height;
+									let svgDim = svgRef.getBoundingClientRect();
+									let widthScaleFactor = svgDim.width / image_dimensions[selectedIndex].width;
+									let heightScaleFactor = svgDim.height / image_dimensions[selectedIndex].height;
 
 									let x = e.offsetX / widthScaleFactor;
 									let y = e.offsetY / heightScaleFactor;
@@ -97,7 +105,7 @@
 							if (annotationState === 'drawing') {
 								if (box) {
 									if (box.w > 5 && box.h > 5) {
-										images[selectedIndex].pollen = [...images[selectedIndex].pollen, { box }];
+										selectedImage.pollen = [...selectedImage.pollen, { box }];
 									}
 									box = null;
 									annotationState = 'idle';
@@ -105,7 +113,7 @@
 							}
 						}}
 					>
-						{#each images[selectedIndex].pollen as pollen, i}
+						{#each selectedImage.pollen as pollen, i}
 							<Box
 								x={pollen.box.x}
 								y={pollen.box.y}
@@ -142,15 +150,15 @@
 	<Row padding>
 		<div class="container">
 			{#each images as image, i}
-				<SelectableTile
+				<Tile
 					style="display: inline-block;"
-					selected={selectedIndex === images.indexOf(image)}
+					light={selectedIndex !== images.indexOf(image)}
 					on:click={() => {
-						selectedIndex = images.indexOf(image)
+						selectedIndex = images.indexOf(image);
 					}}
 				>
 					<img src={image.img.src} alt={image.name} style="width: 10rem;" />
-				</SelectableTile>
+				</Tile>
 			{/each}
 		</div>
 	</Row>
