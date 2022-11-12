@@ -15,8 +15,12 @@
 		Button
 	} from 'carbon-components-svelte';
 
+	import { white } from '@carbon/colors';
+
 	import Edit from 'carbon-icons-svelte/lib/Edit.svelte';
 	import Save from 'carbon-icons-svelte/lib/Save.svelte';
+
+	let scalingFactorInput = 10;
 
 	function readURL(f: File) {
 		var reader = new FileReader();
@@ -32,7 +36,7 @@
 							name: f.name,
 							img: img,
 							pollen: [],
-							scaling_factor: 1
+							scaling_factor: scalingFactorInput
 						}
 					];
 				};
@@ -51,7 +55,6 @@
 
 	let editing = false;
 	let selectedRowIds: any[] = [];
-	let scalingFactorInput = 1;
 </script>
 
 <Grid>
@@ -66,7 +69,7 @@
 					headers={[
 						{ key: 'name', value: 'Name' },
 						{ key: 'resolution', value: 'Resolution' },
-						{ key: 'scaling_factor', value: 'Scaling Factor' },
+						{ key: 'scaling_factor', value: 'Pixels/Micron' },
 						{ key: 'size', value: 'Size' }
 					]}
 					rows={images.map((image) => {
@@ -94,6 +97,7 @@
 										hideSteppers
 										bind:value={scalingFactorInput}
 									/>
+									<p style={`color: ${white}`}>&nbsp; pixels/micron</p>
 									<Button
 										icon={Save}
 										disabled={selectedRowIds.length === 0}
@@ -123,19 +127,20 @@
 					</svelte:fragment>
 				</DataTable>
 			</Column>
-		{:else}
-			<Column padding>
-				<FileUploaderDropContainer
-					multiple
-					labelText="Drag and drop files here or click to upload (only JPG and PNG files are accepted)"
-					accept={['.jpg', '.jpeg', '.png']}
-					on:change={(e) => {
-						e.detail.forEach((f) => {
-							readURL(f);
-						});
-					}}
-				/>
-			</Column>
 		{/if}
+	</Row>
+	<Row>
+		<Column padding>
+			<FileUploaderDropContainer
+				multiple
+				labelText="Drag and drop files here or click to upload (only JPG and PNG files are accepted)"
+				accept={['.jpg', '.jpeg', '.png']}
+				on:change={(e) => {
+					e.detail.forEach((f) => {
+						readURL(f);
+					});
+				}}
+			/>
+		</Column>
 	</Row>
 </Grid>
