@@ -3,6 +3,7 @@
 
 	import Upload from '../components/upload.svelte';
 	import Select from '../components/select.svelte';
+	import Classify from '../components/classify.svelte';
 
 	let currentIndex = 1;
 
@@ -66,9 +67,12 @@
 {:else if state == 'select'}
 	<Select bind:images />
 	<br />
-	<Button on:click={() => setState('classify')}>Next</Button>
+	<Button
+		on:click={() => setState('classify')}
+		disabled={images.filter((image) => image.pollen.length == 0).length > 0}>Next</Button
+	>
 {:else if state == 'classify'}
-	<p>Identify Species</p>
+	<Classify bind:images />
 	<Button on:click={() => setState('results')}>Next</Button>
 {:else if state == 'results'}
 	<p>Export Results</p>

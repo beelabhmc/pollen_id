@@ -7,6 +7,8 @@ import torch.nn.functional as F
 from PIL import Image
 import torchvision.transforms as transforms
 
+from api.utils import idx_to_classes, classes_to_idx, path_to_models
+
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
 image_transforms = transforms.Compose(
@@ -50,90 +52,23 @@ class Network(nn.Module):
             nn.ReLU(),
             nn.Linear(1024, 128),
             nn.ReLU(),
-            nn.Linear(128, len(classes)),
+            nn.Linear(128, len(idx_to_classes)),
         )
 
-    def forward(self, x1, x2):
-        x1 = self.image_features(x1)
-        x = torch.cat((x1, x2), 1)
+    def forward(self, x):
+        x = self.image_features(x)
         x = self.combined_layers(x)
-        x = torch.sigmoid(x)
         return x
 
 
 model = Network(resnet_model).to(device)
 
-model.load_state_dict(torch.load("model.pth"))
+model.load_state_dict(torch.load(str(path_to_models / "resnet50.final.pth"), map_location=device))
 model.eval()
 
-classes_to_idx = {
-    "Acmispon glaber": 0,
-    "Amsinckia intermedia": 1,
-    "Apiastrum angustifolium": 2,
-    "Calystegia macrostegia": 3,
-    "Camissonia bistorta": 4,
-    "Carduus pycnocephalus": 5,
-    "Centaurea melitensis": 6,
-    "Corethrogyne filaginifolia": 7,
-    "Croton setigerus": 8,
-    "Encelia farinosa": 9,
-    "Ericameria pinifolia": 10,
-    "Eriogonum fasciculatum": 11,
-    "Eriogonum gracile": 12,
-    "Erodium Botrys": 13,
-    "Erodium cicutarium": 14,
-    "Heterotheca grandiflora": 15,
-    "Hirschfeldia incana": 16,
-    "Lepidospartum squamatum": 17,
-    "Lessingia glandulifera": 18,
-    "Malosma laurina": 19,
-    "Marah Macrocarpa": 20,
-    "Mirabilis laevis": 21,
-    "Olea europaea": 22,
-    "Penstemon spectabilis": 23,
-    "Phacelia distans": 24,
-    "Rhus integrifolia": 25,
-    "Ribes aureum": 26,
-    "Salvia apiana": 27,
-    "Sambucus nigra": 28,
-    "Solanum umbelliferum": 29,
-}
-
-idx_to_classes = [
-    "Acmispon glaber",
-    "Amsinckia intermedia",
-    "Apiastrum angustifolium",
-    "Calystegia macrostegia",
-    "Camissonia bistorta",
-    "Carduus pycnocephalus",
-    "Centaurea melitensis",
-    "Corethrogyne filaginifolia",
-    "Croton setigerus",
-    "Encelia farinosa",
-    "Ericameria pinifolia",
-    "Eriogonum fasciculatum",
-    "Eriogonum gracile",
-    "Erodium Botrys",
-    "Erodium cicutarium",
-    "Heterotheca grandiflora",
-    "Hirschfeldia incana",
-    "Lepidospartum squamatum",
-    "Lessingia glandulifera",
-    "Malosma laurina",
-    "Marah Macrocarpa",
-    "Mirabilis laevis",
-    "Olea europaea",
-    "Penstemon spectabilis",
-    "Phacelia distans",
-    "Rhus integrifolia",
-    "Ribes aureum",
-    "Salvia apiana",
-    "Sambucus nigra",
-    "Solanum umbelliferum",
-]
-
-def classify_pollen(images):
+def classify(images):
+    converted_images = [image_transforms(Image.fromarray(img)) for img in images]
     with torch.no_grad():
-        output = model(torch.stack(images))
+        output = model(torch.stack(converted_images))
         predictions = output.argmax(dim=1, keepdim=True).squeeze()
-        return [idx_to_classes for idx in list(predictions.cpu().numpy())]
+        return [idx_to_classes[idx] for idx in list(predictions.cpu().numpy())]
