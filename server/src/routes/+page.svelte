@@ -32,7 +32,7 @@
 	let images: {
 		name: string;
 		img: HTMLImageElement;
-		scaling_factor: number;
+		pixels_per_micron: number;
 		pollen: { species?: string; box: { x: number; y: number; w: number; h: number } }[];
 	}[] = [];
 </script>

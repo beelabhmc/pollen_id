@@ -1,21 +1,14 @@
 <script lang="ts">
 	import { Grid, Row, Column, Tile, Button, ProgressBar } from 'carbon-components-svelte';
 	import Box from './box.svelte';
+	import ImageWithOverlay from './ImageWithOverlay.svelte';
 
 	export let images: {
 		name: string;
 		img: HTMLImageElement;
-		scaling_factor: number;
+		pixels_per_micron: number;
 		pollen: { box: { x: number; y: number; w: number; h: number } }[];
 	}[] = [];
-
-	let image_dimensions: { width: number; height: number }[] = [];
-	images.forEach((image) => {
-		image_dimensions.push({
-			width: image.img.width,
-			height: image.img.height
-		});
-	});
 
 	let selectedIndex = 0;
 	$: selectedImage = images[selectedIndex];
@@ -39,6 +32,7 @@
 
 				const formData = new FormData();
 				formData.append('file', imgAsBlob, image.name);
+				formData.append('metadata', JSON.stringify({ pixels_per_micron: image.pixels_per_micron }));
 
 				const automaticallySelectedPollen = await (
 					await fetch(`http://localhost:8000/select_pollen`, {
@@ -62,6 +56,8 @@
 				automaticPollenSelectionStatus += (1 / images.length) * 100;
 			})
 		);
+
+		automaticPollenSelectionStatus = 100;
 	}
 </script>
 
@@ -84,111 +80,102 @@
 		<Column sm={1} md={4} lg={8}>
 			<ProgressBar
 				value={automaticPollenSelectionStatus}
-				helperText={`${images.length == 0 ? 0 : Math.round((automaticPollenSelectionStatus / 100) * images.length)} out of ${images.length} images `}
+				helperText={`${
+					images.length == 0
+						? 0
+						: Math.round((automaticPollenSelectionStatus / 100) * images.length)
+				} out of ${images.length} images `}
 			/>
 		</Column>
 	</Row>
 	<Row padding>
 		<Column>
 			<Tile>
-				<div class="img-overlay-wrap">
-					<img
-						src={selectedImage.img.src}
-						style="width: 100%;"
-						alt={selectedImage.name}
-					/>
-					<svg
-						bind:this={svgRef}
-						viewBox={(() => {
-							const { width, height } = image_dimensions[selectedIndex];
-							return `0 0 ${width} ${height}`;
-						})()}
-						id="draw"
-						xmlns="http://www.w3.org/2000/svg"
-						style="width: 100%;"
-						on:mousedown={(e) => {
-							if (annotationState === 'idle') {
-								annotationState = 'drawing';
+				<ImageWithOverlay
+					img={selectedImage.img}
+					bind:svgRef
+					onmousedown={(e) => {
+						if (annotationState === 'idle') {
+							annotationState = 'drawing';
+							let svgDim = svgRef.getBoundingClientRect();
+							box = {
+								x: (e.offsetX / svgDim.width) * selectedImage.img.width,
+								y: (e.offsetY / svgDim.height) * selectedImage.img.height,
+								w: 0,
+								h: 0
+							};
+						}
+
+						selectedBoxIdx = null;
+					}}
+					onmousemove={(e) => {
+						if (annotationState === 'drawing') {
+							if (box) {
 								let svgDim = svgRef.getBoundingClientRect();
+								let widthScaleFactor = svgDim.width / selectedImage.img.width;
+								let heightScaleFactor = svgDim.height / selectedImage.img.height;
+
+								let x = e.offsetX / widthScaleFactor;
+								let y = e.offsetY / heightScaleFactor;
+								let w = box.x - x;
+								let h = box.y - y;
+
+								if (w < 0) {
+									w *= -1;
+									x -= w;
+								}
+								if (h < 0) {
+									h *= -1;
+									y -= h;
+								}
+
+								w = (w + h) / 2;
+								h = w;
+
 								box = {
-									x: (e.offsetX / svgDim.width) * image_dimensions[selectedIndex].width,
-									y: (e.offsetY / svgDim.height) * image_dimensions[selectedIndex].height,
-									w: 0,
-									h: 0
+									x: x,
+									y: y,
+									w: w,
+									h: h
 								};
 							}
-
-							selectedBoxIdx = null;
-						}}
-						on:mousemove={(e) => {
-							if (annotationState === 'drawing') {
-								if (box) {
-									let svgDim = svgRef.getBoundingClientRect();
-									let widthScaleFactor = svgDim.width / image_dimensions[selectedIndex].width;
-									let heightScaleFactor = svgDim.height / image_dimensions[selectedIndex].height;
-
-									let x = e.offsetX / widthScaleFactor;
-									let y = e.offsetY / heightScaleFactor;
-									let w = box.x - x;
-									let h = box.y - y;
-
-									if (w < 0) {
-										w *= -1;
-										x -= w;
-									}
-									if (h < 0) {
-										h *= -1;
-										y -= h;
-									}
-
-									w = (w + h) / 2;
-									h = w;
-
-									box = {
-										x: x,
-										y: y,
-										w: w,
-										h: h
-									};
+						}
+					}}
+					onmouseup={(e) => {
+						if (annotationState === 'drawing') {
+							if (box) {
+								if (box.w > 5 && box.h > 5) {
+									selectedImage.pollen = [...selectedImage.pollen, { box }];
 								}
+								box = null;
+								annotationState = 'idle';
 							}
-						}}
-						on:mouseup={(e) => {
-							if (annotationState === 'drawing') {
-								if (box) {
-									if (box.w > 5 && box.h > 5) {
-										selectedImage.pollen = [...selectedImage.pollen, { box }];
-									}
-									box = null;
-									annotationState = 'idle';
-								}
-							}
-						}}
-					>
-						{#each selectedImage.pollen as pollen, i}
-							<Box
-								x={pollen.box.x}
-								y={pollen.box.y}
-								w={pollen.box.w}
-								h={pollen.box.h}
-								selected={selectedBoxIdx == i}
-								beingDrawn={false}
-								onclick={() => {
-									selectedBoxIdx = i;
-								}}
-							/>
-						{/each}
-						{#if box}
-							<Box
-								x={box.x}
-								y={box.y}
-								w={box.w}
-								h={box.h}
-								beingDrawn={annotationState === 'drawing'}
-							/>
-						{/if}
-					</svg>
-				</div>
+						}
+					}}
+				>
+					{#each selectedImage.pollen as pollen, i}
+						<Box
+							x={pollen.box.x}
+							y={pollen.box.y}
+							w={pollen.box.w}
+							h={pollen.box.h}
+							selected={selectedBoxIdx == i}
+							beingDrawn={false}
+							onclick={() => {
+								selectedBoxIdx = i;
+							}}
+						/>
+					{/each}
+					{#if box}
+						<Box
+							x={box.x}
+							y={box.y}
+							w={box.w}
+							h={box.h}
+							beingDrawn={annotationState === 'drawing'}
+						/>
+					{/if}
+				</ImageWithOverlay>
 				<Column padding>
 					<p>{images[selectedIndex].name}</p>
 				</Column>
@@ -221,24 +208,5 @@
 		width: 100%;
 		overflow-x: auto;
 		white-space: nowrap;
-	}
-
-	.img-overlay-wrap {
-		position: relative;
-		display: inline-block; /* <= shrinks container to image size */
-		transition: transform 150ms ease-in-out;
-	}
-
-	.img-overlay-wrap img {
-		/* <= optional, for responsiveness */
-		display: block;
-		max-width: 100%;
-		height: auto;
-	}
-
-	.img-overlay-wrap svg {
-		position: absolute;
-		top: 0;
-		left: 0;
 	}
 </style>

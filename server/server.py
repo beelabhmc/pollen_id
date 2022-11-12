@@ -1,7 +1,8 @@
 from flask import Flask, jsonify, request
 from flask_cors import CORS
+import simplejson as json
 
-from api.utils import decode_b64_img
+from api.utils import decode_b64_img, reference_pixels_per_micron, generate_crops
 from api.select_pollen import find_pollen
 # from api.classify_pollen import classify_pollen
 
@@ -13,20 +14,21 @@ app.config["CORS_HEADERS"] = "Content-Type"
 @app.route("/select_pollen", methods=["POST"])
 def select_pollen():
     b64image = request.files['file']
+    metadata = json.loads(request.form['metadata'])
 
     img = decode_b64_img(b64image.read())
 
-    select_pollen = find_pollen(img)
+    select_pollen = find_pollen(img, img_downscale=(metadata['pixels_per_micron'] / reference_pixels_per_micron) * 5)
 
     return jsonify({"filename": b64image.filename, "selected_pollen": select_pollen})
 
-@app.route("/select_pollen", methods=["POST"])
+@app.route("/classify_pollen", methods=["POST"])
 def classify_pollen():
     b64image = request.files['file']
     crop_locations = request.files['crop_locations']
 
     img = decode_b64_img(b64image.read())
-    print(crop_locations)
+    crops = generate_crops(img, crop_locations)
 
     return jsonify({"filename": b64image.filename, "classified_pollen": []})
 

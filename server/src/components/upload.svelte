@@ -36,7 +36,7 @@
 							name: f.name,
 							img: img,
 							pollen: [],
-							scaling_factor: scalingFactorInput
+							pixels_per_micron: scalingFactorInput
 						}
 					];
 				};
@@ -49,7 +49,7 @@
 	export let images: {
 		name: string;
 		img: HTMLImageElement;
-		scaling_factor: number;
+		pixels_per_micron: number;
 		pollen: {}[];
 	}[] = [];
 
@@ -78,7 +78,7 @@
 							name: image.name,
 							resolution: `${image.img.width} x ${image.img.height}`,
 							size: ((image.img.src.length * (3 / 4)) / 1000000).toFixed(2) + ' MB',
-							scaling_factor: image.scaling_factor,
+							scaling_factor: image.pixels_per_micron,
 							img: image.img
 						};
 					})}
@@ -105,7 +105,7 @@
 											editing = false;
 											for (let i = 0; i < images.length; i++) {
 												if (selectedRowIds.includes(images[i].name)) {
-													images[i].scaling_factor = scalingFactorInput;
+													images[i].pixels_per_micron = scalingFactorInput;
 												}
 											}
 										}}>Save</Button
