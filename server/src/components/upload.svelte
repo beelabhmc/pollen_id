@@ -5,8 +5,18 @@
 		Row,
 		Column,
 		Tile,
-		ImageLoader
+		ImageLoader,
+		DataTable,
+		Toolbar,
+		ToolbarContent,
+		ToolbarBatchActions,
+		ToolbarSearch,
+		NumberInput,
+		Button
 	} from 'carbon-components-svelte';
+
+	import Edit from 'carbon-icons-svelte/lib/Edit.svelte';
+	import Save from 'carbon-icons-svelte/lib/Save.svelte';
 
 	function readURL(f: File) {
 		var reader = new FileReader();
@@ -21,7 +31,8 @@
 						{
 							name: f.name,
 							img: img,
-							pollen: []
+							pollen: [],
+							scaling_factor: 1
 						}
 					];
 				};
@@ -31,20 +42,87 @@
 		reader.readAsDataURL(f);
 	}
 
-	export let images: { name: string; img: HTMLImageElement, pollen: {}[] }[] = [];
+	export let images: {
+		name: string;
+		img: HTMLImageElement;
+		scaling_factor: number;
+		pollen: {}[];
+	}[] = [];
+
+	let editing = false;
+	let selectedRowIds: any[] = [];
+	let scalingFactorInput = 1;
 </script>
 
 <Grid>
 	<Row>
 		{#if images.length > 0}
-			{#each images as file, i}
-				<Column padding>
-					<Tile>
-						<ImageLoader src={file.img.src} />
-						{file.name}
-					</Tile>
-				</Column>
-			{/each}
+			<Column padding>
+				<DataTable
+					expandable
+					batchSelection
+					bind:selectedRowIds
+					title="Images"
+					headers={[
+						{ key: 'name', value: 'Name' },
+						{ key: 'resolution', value: 'Resolution' },
+						{ key: 'scaling_factor', value: 'Scaling Factor' },
+						{ key: 'size', value: 'Size' }
+					]}
+					rows={images.map((image) => {
+						return {
+							id: image.name,
+							name: image.name,
+							resolution: `${image.img.width} x ${image.img.height}`,
+							size: ((image.img.src.length * (3 / 4)) / 1000000).toFixed(2) + ' MB',
+							scaling_factor: image.scaling_factor,
+							img: image.img
+						};
+					})}
+				>
+					<Toolbar>
+						<ToolbarContent>
+							{#if editing}
+								<ToolbarBatchActions
+									on:cancel={() => {
+										editing = false;
+									}}
+								>
+									<NumberInput
+										hideLabel
+										label="scaling_factor"
+										hideSteppers
+										bind:value={scalingFactorInput}
+									/>
+									<Button
+										icon={Save}
+										disabled={selectedRowIds.length === 0}
+										on:click={() => {
+											editing = false;
+											for (let i = 0; i < images.length; i++) {
+												if (selectedRowIds.includes(images[i].name)) {
+													images[i].scaling_factor = scalingFactorInput;
+												}
+											}
+										}}>Save</Button
+									>
+								</ToolbarBatchActions>
+							{:else}
+								<Button
+									icon={Edit}
+									disabled={selectedRowIds.length === 0}
+									on:click={() => {
+										editing = true;
+									}}>Edit Scaling Factor</Button
+								>
+							{/if}
+						</ToolbarContent>
+					</Toolbar>
+					<svelte:fragment slot="expanded-row" let:row>
+						<img src={row.img.src} height="100" alt={row.name} />
+					</svelte:fragment>
+				</DataTable>
+			</Column>
 		{:else}
 			<Column padding>
 				<FileUploaderDropContainer

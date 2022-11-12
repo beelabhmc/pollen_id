@@ -3,7 +3,7 @@ from flask_cors import CORS
 
 from api.utils import decode_b64_img
 from api.select_pollen import find_pollen
-from api.classify_pollen import classify_pollen
+# from api.classify_pollen import classify_pollen
 
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})

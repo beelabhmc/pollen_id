@@ -5,6 +5,7 @@
 	export let images: {
 		name: string;
 		img: HTMLImageElement;
+		scaling_factor: number;
 		pollen: { box: { x: number; y: number; w: number; h: number } }[];
 	}[] = [];
 
@@ -92,7 +93,6 @@
 			<Tile>
 				<div class="img-overlay-wrap">
 					<img
-						bind:this={selectedImage.img}
 						src={selectedImage.img.src}
 						style="width: 100%;"
 						alt={selectedImage.name}
