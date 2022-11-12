@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Grid, Row, Column, Tile, ImageLoader, SelectableTile } from 'carbon-components-svelte';
+	import { Grid, Row, Column, Tile, Button, ProgressBar } from 'carbon-components-svelte';
 	import Box from './box.svelte';
 
 	export let images: {
@@ -8,11 +8,11 @@
 		pollen: { box: { x: number; y: number; w: number; h: number } }[];
 	}[] = [];
 
-	let image_dimensions: {width: number, height: number}[] = [];
+	let image_dimensions: { width: number; height: number }[] = [];
 	images.forEach((image) => {
 		image_dimensions.push({
 			width: image.img.width,
-			height: image.img.height,
+			height: image.img.height
 		});
 	});
 
@@ -24,6 +24,8 @@
 	let box: { x: number; y: number; w: number; h: number } | null = null;
 
 	let svgRef: SVGSVGElement;
+
+	let automaticPollenSelectionStatus = 0;
 </script>
 
 <svelte:window
@@ -38,7 +40,25 @@
 />
 
 <Grid>
-	<Row>
+	<Row padding>
+		<Column sm={1} md={2} lg={2}>
+			<Button
+			on:click={() => {
+				images.forEach(async (image, i) => {
+					automaticPollenSelectionStatus = (i / images.length) * 100;
+					image.pollen = [];
+					const automaticallySelectedPollen = await (await fetch(`http://localhost:8000/select_pollen`, { method: 'post', mode: 'cors' })).json();
+					console.log(automaticallySelectedPollen);
+				});
+				automaticPollenSelectionStatus = 100;
+			}}
+			>Automatically Select Pollen</Button>
+		</Column>
+		<Column sm={1} md={4} lg={8}>
+			<ProgressBar value={automaticPollenSelectionStatus} helperText={`${1} out of ${images.length} images `} />
+		</Column>
+	</Row>
+	<Row padding>
 		<Column>
 			<Tile>
 				<div class="img-overlay-wrap">
