@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { Grid, Row, Column, Tile, Button, ProgressBar } from 'carbon-components-svelte';
+	import { get } from 'svelte/store';
 	import Box from './box.svelte';
 
 	export let images: {
@@ -43,19 +44,34 @@
 	<Row padding>
 		<Column sm={1} md={2} lg={2}>
 			<Button
-			on:click={() => {
-				images.forEach(async (image, i) => {
-					automaticPollenSelectionStatus = (i / images.length) * 100;
-					image.pollen = [];
-					const automaticallySelectedPollen = await (await fetch(`http://localhost:8000/select_pollen`, { method: 'post', mode: 'cors' })).json();
-					console.log(automaticallySelectedPollen);
-				});
-				automaticPollenSelectionStatus = 100;
-			}}
-			>Automatically Select Pollen</Button>
+				on:click={() => {
+					images.forEach(async (image, i) => {
+						automaticPollenSelectionStatus = (i / images.length) * 100;
+						image.pollen = [];
+
+						const imgAsBlob = await (await fetch(image.img.src)).blob();
+
+						const formData = new FormData();
+						formData.append('file', imgAsBlob, image.name);
+
+						const automaticallySelectedPollen = await (
+							await fetch(`http://localhost:8000/select_pollen`, {
+								method: 'post',
+								mode: 'cors',
+								body: formData,
+							})
+						).json();
+						console.log(automaticallySelectedPollen);
+					});
+					automaticPollenSelectionStatus = 100;
+				}}>Automatically Select Pollen</Button
+			>
 		</Column>
 		<Column sm={1} md={4} lg={8}>
-			<ProgressBar value={automaticPollenSelectionStatus} helperText={`${1} out of ${images.length} images `} />
+			<ProgressBar
+				value={automaticPollenSelectionStatus}
+				helperText={`${1} out of ${images.length} images `}
+			/>
 		</Column>
 	</Row>
 	<Row padding>

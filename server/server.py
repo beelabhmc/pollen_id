@@ -7,12 +7,11 @@ app.config["CORS_HEADERS"] = "Content-Type"
 
 
 @app.route("/select_pollen", methods=["POST"])
-def hello_world():
-    data = request.get_json()
-    print(data)
-    return jsonify({"message": "Hello, World!"})
+def select_pollen():
+    image = request.files['file']
+
+    return jsonify({"filename": image.filename})
 
 
 if __name__ == "__main__":
-    # app.debug=True
-    app.run(host="0.0.0.0", port=8000)
+    app.run(host="0.0.0.0", port=8000, debug=True)
