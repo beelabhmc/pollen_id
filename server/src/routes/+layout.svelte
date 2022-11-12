@@ -11,8 +11,6 @@
 		Column
 	} from 'carbon-components-svelte';
 
-	import Timeline from './timeline.svelte';
-
 	import 'carbon-components-svelte/css/white.css';
 
 	let isSideNavOpen = false;
@@ -35,7 +33,6 @@
 </Header>
 
 <Content>
-	<Timeline />
 	<Grid>
 		<Row>
 			<Column>
