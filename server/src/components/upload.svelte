@@ -13,20 +13,25 @@
 
 		reader.onload = function (e) {
 			if (e.target) {
-				images = [
-					...images,
-					{
-						name: f.name,
-						url: e.target.result as string
-					}
-				];
+				const img = new Image();
+				img.src = e.target.result as string;
+				img.onload = () => {
+					images = [
+						...images,
+						{
+							name: f.name,
+							img: img,
+							pollen: []
+						}
+					];
+				};
 			}
 		};
 
 		reader.readAsDataURL(f);
 	}
 
-	export let images: { name: string; url: string }[] = [];
+	export let images: { name: string; img: HTMLImageElement, pollen: {}[] }[] = [];
 </script>
 
 <Grid>
@@ -35,7 +40,7 @@
 			{#each images as file, i}
 				<Column padding>
 					<Tile>
-						<ImageLoader src={file.url} />
+						<ImageLoader src={file.img.src} />
 						{file.name}
 					</Tile>
 				</Column>

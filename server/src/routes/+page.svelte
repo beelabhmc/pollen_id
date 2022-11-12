@@ -2,7 +2,7 @@
 	import { ProgressIndicator, ProgressStep, Button } from 'carbon-components-svelte';
 
 	import Upload from '../components/upload.svelte';
-    import Select from '../components/select.svelte';
+	import Select from '../components/select.svelte';
 
 	let currentIndex = 1;
 
@@ -29,7 +29,11 @@
 	}
 	setState(state);
 
-    let images: {name: string, url: string, pollen?: {species?: string, box: {x: number, y: number, w: number, h: number}}}[] = [];
+	let images: {
+		name: string;
+		img: HTMLImageElement;
+		pollen: { species?: string; box: { x: number; y: number; w: number; h: number } }[];
+	}[] = [];
 </script>
 
 <ProgressIndicator preventChangeOnClick bind:currentIndex>
@@ -56,15 +60,15 @@
 </ProgressIndicator>
 
 {#if state == 'upload'}
-    <Upload bind:images />
-    <Button on:click={() => setState('select')} disabled={images.length == 0}>Next</Button>
+	<Upload bind:images />
+	<Button on:click={() => setState('select')} disabled={images.length == 0}>Next</Button>
 {:else if state == 'select'}
-    <Select bind:images />
-    <br>
-    <Button on:click={() => setState('classify')}>Next</Button>
+	<Select bind:images />
+	<br />
+	<Button on:click={() => setState('classify')}>Next</Button>
 {:else if state == 'classify'}
-    <p>Identify Species</p>
-    <Button on:click={() => setState('results')}>Next</Button>
+	<p>Identify Species</p>
+	<Button on:click={() => setState('results')}>Next</Button>
 {:else if state == 'results'}
-    <p>Export Results</p>
+	<p>Export Results</p>
 {/if}
