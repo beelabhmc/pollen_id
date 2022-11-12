@@ -1,10 +1,12 @@
 {
     "cSpell.words": [
         "iloc",
+        "imdecode",
         "imread",
         "imshow",
         "imwrite",
         "iterrows",
+        "jsonify",
         "ncols",
         "ndimage",
         "nrows",

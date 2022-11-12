@@ -36,7 +36,7 @@
 	}[] = [];
 </script>
 
-<ProgressIndicator preventChangeOnClick bind:currentIndex>
+<ProgressIndicator preventChangeOnClick bind:currentIndex spaceEqually>
 	<ProgressStep
 		complete={currentIndex > 0}
 		label="Upload Images"
