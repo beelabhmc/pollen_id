@@ -4,6 +4,7 @@
 	import Upload from '../components/upload.svelte';
 	import Select from '../components/select.svelte';
 	import Classify from '../components/classify.svelte';
+	import Results from '../components/results.svelte';
 
 	let currentIndex = 1;
 
@@ -75,5 +76,5 @@
 	<Classify bind:images />
 	<Button on:click={() => setState('results')}>Next</Button>
 {:else if state == 'results'}
-	<p>Export Results</p>
+	<Results bind:images />
 {/if}
