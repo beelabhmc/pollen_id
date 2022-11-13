@@ -30,7 +30,8 @@
 	}
 
 	function saveCSV() {
-		let csvContent = 'data:text/csv;charset=utf-8,' + headerRow + '\n' + rows.map((e) => e.join(',')).join('\n');
+		let csvContent =
+			'data:text/csv;charset=utf-8,' + headerRow + '\n' + rows.map((e) => e.join(',')).join('\n');
 		const encodedUri = encodeURI(csvContent);
 		window.open(encodedUri);
 	}
@@ -40,6 +41,7 @@
 	<Row>
 		<Column padding>
 			<DataTable
+				stickyHeader
 				size="short"
 				title="Detected Pollen"
 				headers={[
@@ -64,7 +66,7 @@
 			/>
 		</Column>
 	</Row>
-    <Row>
-        <Button icon={Download} on:click={saveCSV}>Download</Button>
-    </Row>
+	<Row>
+		<Button icon={Download} on:click={saveCSV}>Download</Button>
+	</Row>
 </Grid>

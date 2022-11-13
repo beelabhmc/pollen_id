@@ -5,7 +5,7 @@ from pathlib import Path
 
 path_to_models = Path(__file__).parent.resolve() / "models"
 
-reference_pixels_per_micron = 10
+reference_pixels_per_micron = 15
 
 
 classes_to_idx = {
