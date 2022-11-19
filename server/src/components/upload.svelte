@@ -20,7 +20,7 @@
 	import Edit from 'carbon-icons-svelte/lib/Edit.svelte';
 	import Save from 'carbon-icons-svelte/lib/Save.svelte';
 
-	let scalingFactorInput = 10;
+	let scalingFactorInput = 15;
 
 	function readURL(f: File) {
 		var reader = new FileReader();

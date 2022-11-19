@@ -18,7 +18,7 @@ def select_pollen():
 
     img = decode_b64_img(b64image.read())
 
-    select_pollen = find_pollen(img, img_downscale=(metadata['pixels_per_micron'] / reference_pixels_per_micron) * 5)
+    select_pollen = find_pollen(img, img_downscale=int((metadata['pixels_per_micron'] / reference_pixels_per_micron) * 5))
 
     return jsonify({"filename": b64image.filename, "selected_pollen": select_pollen})
 
