@@ -6,25 +6,41 @@
 		name: string;
 		img: HTMLImageElement;
 		pixels_per_micron: number;
-		pollen: { species?: string; box: { x: number; y: number; w: number; h: number } }[];
+		pollen: { species?: [string, number][]; box: { x: number; y: number; w: number; h: number } }[];
 	}[] = [];
+	export let topN: string = '1';
 
-	let rows: [string, string, string, number, number, number, number][] = [];
-	const headerRow = 'id, filename, species, x, y, w, h';
+	let rows: Array<string | number>[] = [];
+	let headerRow = ['id', 'filename', 'x', 'y', 'w', 'h'];
+	$: {
+		headerRow = ['id', 'filename', 'x', 'y', 'w', 'h'];
+		for (let i = 0; i < Number(topN); i++) {
+			headerRow = [...headerRow, `species${i + 1}`, `confidence${i + 1}`];
+		}
+	}
 
 	$: {
 		rows = [];
 		for (let i = 0; i < images.length; i++) {
 			for (let j = 0; j < images[i].pollen.length; j++) {
-				rows.push([
+				let row = [
 					i + '-' + j,
 					images[i].name,
-					images[i].pollen[j].species || 'Unknown',
 					images[i].pollen[j].box.x,
 					images[i].pollen[j].box.y,
 					images[i].pollen[j].box.w,
 					images[i].pollen[j].box.h
-				]);
+				];
+				if (images[i].pollen[j].species) {
+					images[i].pollen[j].species?.forEach((species) => {
+						row = [...row, ...species];
+					});
+				} else {
+					for (let k = 0; k < Number(topN); k++) {
+						row = [...row, '', 0];
+					}
+				}
+				rows.push(row);
 			}
 		}
 	}
@@ -44,24 +60,20 @@
 				stickyHeader
 				size="short"
 				title="Detected Pollen"
-				headers={[
-					{ key: 'filename', value: 'Filename' },
-					{ key: 'species', value: 'Species' },
-					{ key: 'x', value: 'x' },
-					{ key: 'y', value: 'y' },
-					{ key: 'w', value: 'w' },
-					{ key: 'h', value: 'h' }
-				]}
+				headers={headerRow.map((header) => ({ key: header, value: header }))}
 				rows={rows.map((row) => {
-					return {
+					let r = {
 						id: row[0],
 						filename: row[1],
-						species: row[2],
-						x: row[3],
-						y: row[4],
-						w: row[5],
-						h: row[6]
+						x: row[2],
+						y: row[3],
+						w: row[4],
+						h: row[5]
 					};
+					for (let i = 0; i < Number(topN); i++) {
+						r = { ...r, [`species${i + 1}`]: row[6 + i * 2], [`confidence${i + 1}`]: row[7 + i * 2].toFixed(3) };
+					}
+					return r;
 				})}
 			/>
 		</Column>

@@ -35,8 +35,10 @@
 		name: string;
 		img: HTMLImageElement;
 		pixels_per_micron: number;
-		pollen: { species?: string; box: { x: number; y: number; w: number; h: number } }[];
+		pollen: { species?: [string, number][]; box: { x: number; y: number; w: number; h: number } }[];
 	}[] = [];
+
+	let topN: string;
 </script>
 
 <ProgressIndicator preventChangeOnClick bind:currentIndex spaceEqually>
@@ -73,8 +75,8 @@
 		disabled={images.filter((image) => image.pollen.length == 0).length > 0}>Next</Button
 	>
 {:else if state == 'classify'}
-	<Classify bind:images />
+	<Classify bind:images bind:topN/>
 	<Button on:click={() => setState('results')}>Next</Button>
 {:else if state == 'results'}
-	<Results bind:images />
+	<Results bind:images bind:topN/>
 {/if}

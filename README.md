@@ -29,3 +29,13 @@ Repository for the Pollen ID project
     - This extracts the individual pollen grains from each pollen slide image and stores them in a new folder `pollen_grains`
 
 Now you are read to run the machine learning code.
+
+### Server Setup
+1. Copy the model.yml file into `server/api/models` and rename it to `edge_detection_model.yml`
+2. Copy your trained network `.pth` file into `server/api/models` and give it a useful name.
+    - You will need to update the filename that the server reads at the bottom of [classify_pollen.py](server/api/classify_pollen.py). If you change the nextwork structure, you will also need to update the network architecture in [classify_pollen.py](server/api/classify_pollen.py) as well.
+    - If you change the number of classes, you will also need to update the index to class mapping in [classify_pollen.py](server/api/utils.py)
+
+### Running the Server
+The front end of the server is hosted on github pages, and will automatically be updated on each commit
+The backend ML api is contained in the `server` folder. To run the server, you will need to have the conda environment activated and then run `python server.py` from the `server` folder. The required libraries for the server are the same as in [requirements.txt](requirements.txt). PyTorch should also be installed on the server following the directions above.
