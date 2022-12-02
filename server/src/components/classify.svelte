@@ -47,7 +47,7 @@
 						body: formData
 					})
 				).json();
-				console.log(classifiedPollen.classified_pollen);
+
 				for (let j = 0; j < classifiedPollen.classified_pollen.length; j++) {
 					images[i].pollen[j].species = classifiedPollen.classified_pollen[j];
 				}
@@ -79,7 +79,6 @@
 			<Form
 				on:submit={(e) => {
 					e.preventDefault();
-					console.log(topN);
 					classifyPollen();
 				}}
 			>

@@ -71,7 +71,7 @@
 						h: row[5]
 					};
 					for (let i = 0; i < Number(topN); i++) {
-						r = { ...r, [`species${i + 1}`]: row[6 + i * 2], [`confidence${i + 1}`]: row[7 + i * 2].toFixed(3) };
+						r = { ...r, [`species${i + 1}`]: row[6 + i * 2], [`confidence${i + 1}`]: Number(row[7 + i * 2]).toFixed(3) };
 					}
 					return r;
 				})}
