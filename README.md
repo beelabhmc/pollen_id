@@ -1,5 +1,4 @@
-# pollen_id
-Repository for the Pollen ID project
+# Pollen ID
 
 ## Setup Instructions
 ### Basic Setup
@@ -29,6 +28,11 @@ Repository for the Pollen ID project
     - This extracts the individual pollen grains from each pollen slide image and stores them in a new folder `pollen_grains`
 
 Now you are read to run the machine learning code.
+
+### Machine Learning Code
+This repository contains code for training and testing two different networks. A CNN that uses transfer learning with ResNet 50 for feature extraction, and a SNN (which also happens to use ResNet 50 for feature extraction).
+
+The CNN is stored in [simple_cnn_classifier.py](/simple_cnn_classifier.py) and the SNN is in [meta_learning.py](/meta_learning.py). While these are both python files, they contain cells similar to a jupyter notebook as described [here](https://code.visualstudio.com/docs/python/jupyter-support-py). They can be run as normal python files, but for the best developer experience they should be opened in VS Code with the python and jupyter extensions installed. Both files contain comments and documentation in the form of Markdown cells so they are not described here.
 
 ### Server Setup
 1. Copy the model.yml file into `server/api/models` and rename it to `edge_detection_model.yml`
