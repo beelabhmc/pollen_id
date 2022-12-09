@@ -20,7 +20,7 @@
 │  ├── Sambucus nigra
 │  └── Solanum umbelliferum
 ```
-3. Download the [`model.yml.gz`](https://github.com/opencv/opencv_extra/blob/4.x/testdata/cv/ximgproc/model.yml.gz) file (this is used for edge detection during pollen segmentation)
+3. Download the [model.yml.gz](https://github.com/opencv/opencv_extra/blob/4.x/testdata/cv/ximgproc/model.yml.gz) file (this is used for edge detection during pollen segmentation)
     - After downloading, unzip it, and make sure it is in the root `pollen_id` folder and called `model.yml`
 4. Run the intake data script `python intake_data.py`
     -  This will go through all the images in the `pollen_slides` folder and create a database that categorizes them based on their folder and file name
