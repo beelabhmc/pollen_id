@@ -26,7 +26,7 @@ pollen_grains_dir = pathlib.Path("pollen_grains")
 
 model_save_dir = pathlib.Path("models")
 model_save_dir.mkdir(parents=True, exist_ok=True)
-model_name = "resnet50_with_context"
+model_name = "resnet50_without_context"
 
 torch.manual_seed(42)
 torch.cuda.manual_seed(42)
@@ -180,16 +180,15 @@ class Network(nn.Module):
 
         # TODO: Research if there are better fc layer setups
         self.combined_layers = nn.Sequential(
-            nn.Linear(2048 + 1, 1024), # the number of neurons in the first layer should be 2048 (# of resnet features) + (# of context features)
+            nn.Linear(2048, 1024), # the number of neurons in the first layer should be 2048 (# of resnet features) + (# of context features)
             nn.ReLU(),
             nn.Linear(1024, 128),
             nn.ReLU(),
             nn.Linear(128, len(classes)),
         )
 
-    def forward(self, x1, x2):
-        x1 = self.image_features(x1)
-        x = torch.cat((x1, x2), 1)
+    def forward(self, x):
+        x = self.image_features(x)
         x = self.combined_layers(x)
         x = torch.sigmoid(x)
         return x
@@ -240,7 +239,7 @@ for epoch in range(250):
 
             images, context, target = images.to(device), context.to(device), target.to(device)
             optimizer.zero_grad()
-            output = model(images, context)
+            output = model(images)
             loss = criterion(output, target)
             predictions = output.argmax(dim=1, keepdim=True).squeeze()
             metric.reset()
@@ -252,9 +251,9 @@ for epoch in range(250):
             tepoch.set_postfix(loss=loss.item(), accuracy=100.0 * accuracy.item())
             running_loss += loss.item()
             running_acc += accuracy.item()
-    # torch.save(
-    #     model.state_dict(), model_save_dir / f"{model_name}.snapshot-epoch{epoch}.pth"
-    # )
+    torch.save(
+        model.state_dict(), model_save_dir / f"{model_name}.snapshot-epoch{epoch}.pth"
+    )
 
     train_loss.append(running_loss / len(train_loader))
     train_acc.append(running_acc / len(train_loader))
@@ -265,7 +264,7 @@ for epoch in range(250):
     with torch.no_grad():
         for images, context, target in test_loader:
             images, context, target = images.to(device), context.to(device), target.to(device)
-            output = model(images, context)
+            output = model(images)
             loss = criterion(output, target)
             predictions = output.argmax(dim=1, keepdim=True).squeeze()
             metric.reset()
@@ -307,7 +306,7 @@ model.eval()
 with torch.no_grad():
     for data in test_loader:
         images, context, labels = data[0].to(device), data[1].to(device), data[2].to(device)
-        output = model(images, context)
+        output = model(images)
         predictions = output.argmax(dim=1, keepdim=True).squeeze()
 
         labels = labels.data.cpu().numpy()

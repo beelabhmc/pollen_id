@@ -149,13 +149,17 @@ class SiameseNetworkDataset(torch.utils.data.Dataset):
 
 # %%
 train_set = PollenDataset(
-    pollen_grains_dir / "train", min_num=10, transform=train_transform
+    pollen_grains_dir / "train", min_num=50, transform=train_transform
 )
 test_set = PollenDataset(
-    pollen_grains_dir / "test", classes=train_set.classes, transform=test_transform
+    pollen_grains_dir / "test", min_num=5, transform=test_transform
 )
 
-classes = train_set.classes
+siamese_reference_set = PollenDataset(
+    pollen_grains_dir / "train", classes=test_set.classes, transform=test_transform
+)
+
+classes = siamese_reference_set.classes
 
 # Print how many of each class we have
 print(
@@ -374,19 +378,19 @@ combined_predictions = []
 all_class_ref_imgs = [[] for _ in range(len(classes))]
 
 # this is inefficient, but it works
-all_images = list(range(len(test_set)))
+all_images = list(range(len(siamese_reference_set)))
 random.shuffle(all_images)
 for i in all_images:
-    img_idx, contextual_features, img_cls = test_set[i]
-    if len(all_class_ref_imgs[img_cls]) < 5:
-        img = test_set.load_image(img_idx)
-        if test_set.transform:
-            img = test_set.transform(img)
+    img_idx, contextual_features, img_cls = siamese_reference_set[i]
+    if len(all_class_ref_imgs[img_cls]) < 20:
+        img = siamese_reference_set.load_image(img_idx)
+        if siamese_reference_set.transform:
+            img = siamese_reference_set.transform(img)
         all_class_ref_imgs[img_cls].append(img)
 
 model.eval()
 with torch.no_grad():
-    with tqdm(test_set, unit="batch") as tqdm_test_set:
+    with tqdm(test_set, unit="image") as tqdm_test_set:
         for img_idx, contextual_features, img_cls in tqdm_test_set:
             img = test_set.load_image(img_idx)
             if test_set.transform:
