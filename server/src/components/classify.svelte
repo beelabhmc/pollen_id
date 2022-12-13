@@ -19,7 +19,7 @@
 		name: string;
 		img: HTMLImageElement;
 		pixels_per_micron: number;
-		pollen: { species?: string; box: { x: number; y: number; w: number; h: number } }[];
+		pollen: { species?: [string, number][]; box: { x: number; y: number; w: number; h: number } }[];
 	}[] = [];
 
 	let classifyingProgress = 0;
@@ -35,7 +35,8 @@
 					'metadata',
 					JSON.stringify({
 						pixels_per_micron: image.pixels_per_micron,
-						crop_locations: image.pollen.map((p) => p.box)
+						crop_locations: image.pollen.map((p) => p.box),
+						top_n: Number(topN)
 					})
 				);
 
@@ -55,11 +56,11 @@
 			})
 		);
 
-        images.forEach((image) => {
-            image.pollen.forEach((pollen) => {
-                console.log(pollen);
-            });
-        });
+		images.forEach((image) => {
+			image.pollen.forEach((pollen) => {
+				console.log(pollen);
+			});
+		});
 
 		status = 'done';
 	}
@@ -68,6 +69,8 @@
 
 	let selectedIndex = 0;
 	let svgRef: SVGElement;
+
+	export let topN = '1';
 </script>
 
 <Grid>
@@ -92,10 +95,10 @@
 					</RadioButtonGroup>
 				</FormGroup>
 				<FormGroup legendText="Result Format">
-					<RadioButtonGroup name="result-format" selected="top1">
-						<RadioButton id="radio-1" value="top1" labelText="Top 1" />
-						<RadioButton id="radio-2" value="top3" labelText="Top 3" disabled />
-						<RadioButton id="radio-4" value="top5" labelText="Top 5" disabled />
+					<RadioButtonGroup name="result-format" bind:selected={topN}>
+						<RadioButton value="1" labelText="Top 1" />
+						<RadioButton value="3" labelText="Top 3" />
+						<RadioButton value="5" labelText="Top 5" />
 					</RadioButtonGroup>
 				</FormGroup>
 				<Button type="submit">Submit</Button>
@@ -120,7 +123,7 @@
 							h={pollen.box.h}
 							selected={false}
 							beingDrawn={false}
-                            label={pollen.species}
+							label={pollen.species ? pollen.species[0][0] : 'Unknown'}
 						/>
 					{/each}
 				</ImageWithOverlay>
@@ -129,7 +132,7 @@
 				</Column>
 			</Tile>
 		</Column>
-        <br>
+		<br />
 		<Row padding>
 			<div class="container">
 				{#each images as image, i}

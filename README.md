@@ -1,5 +1,4 @@
-# pollen_id
-Repository for the Pollen ID project
+# Pollen ID
 
 ## Setup Instructions
 ### Basic Setup
@@ -21,7 +20,7 @@ Repository for the Pollen ID project
 │  ├── Sambucus nigra
 │  └── Solanum umbelliferum
 ```
-3. Download the [`model.yml.gz`](https://github.com/opencv/opencv_extra/blob/4.x/testdata/cv/ximgproc/model.yml.gz) file (this is used for edge detection during pollen segmentation)
+3. Download the [model.yml.gz](https://github.com/opencv/opencv_extra/blob/4.x/testdata/cv/ximgproc/model.yml.gz) file (this is used for edge detection during pollen segmentation)
     - After downloading, unzip it, and make sure it is in the root `pollen_id` folder and called `model.yml`
 4. Run the intake data script `python intake_data.py`
     -  This will go through all the images in the `pollen_slides` folder and create a database that categorizes them based on their folder and file name
@@ -29,3 +28,18 @@ Repository for the Pollen ID project
     - This extracts the individual pollen grains from each pollen slide image and stores them in a new folder `pollen_grains`
 
 Now you are read to run the machine learning code.
+
+### Machine Learning Code
+This repository contains code for training and testing two different networks. A CNN that uses transfer learning with ResNet 50 for feature extraction, and a SNN (which also happens to use ResNet 50 for feature extraction).
+
+The CNN is stored in [simple_cnn_classifier.py](/simple_cnn_classifier.py) and the SNN is in [meta_learning.py](/meta_learning.py). While these are both python files, they contain cells similar to a jupyter notebook as described [here](https://code.visualstudio.com/docs/python/jupyter-support-py). They can be run as normal python files, but for the best developer experience they should be opened in VS Code with the python and jupyter extensions installed. Both files contain comments and documentation in the form of Markdown cells so they are not described here.
+
+### Server Setup
+1. Copy the model.yml file into `server/api/models` and rename it to `edge_detection_model.yml`
+2. Copy your trained network `.pth` file into `server/api/models` and give it a useful name.
+    - You will need to update the filename that the server reads at the bottom of [classify_pollen.py](server/api/classify_pollen.py). If you change the nextwork structure, you will also need to update the network architecture in [classify_pollen.py](server/api/classify_pollen.py) as well.
+    - If you change the number of classes, you will also need to update the index to class mapping in [classify_pollen.py](server/api/utils.py)
+
+### Running the Server
+The front end of the server is hosted on github pages, and will automatically be updated on each commit
+The backend ML api is contained in the `server` folder. To run the server, you will need to have the conda environment activated and then run `python server.py` from the `server` folder. The required libraries for the server are the same as in [requirements.txt](requirements.txt). PyTorch should also be installed on the server following the directions above.

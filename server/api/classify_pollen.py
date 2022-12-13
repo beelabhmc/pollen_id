@@ -7,7 +7,7 @@ import torch.nn.functional as F
 from PIL import Image
 import torchvision.transforms as transforms
 
-from api.utils import idx_to_classes, classes_to_idx, path_to_models
+from api.utils import classes, path_to_models
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -46,18 +46,17 @@ class Network(nn.Module):
 
         # TODO: Research if there are better fc layer setups
         self.combined_layers = nn.Sequential(
-            nn.Linear(
-                2048, 1024
-            ),  # the number of neurons in the first layer should be 2048 (# of resnet features)
+            nn.Linear(2048, 1024), # the number of neurons in the first layer should be 2048 (# of resnet features) + (# of context features)
             nn.ReLU(),
             nn.Linear(1024, 128),
             nn.ReLU(),
-            nn.Linear(128, len(idx_to_classes)),
+            nn.Linear(128, len(classes)),
         )
 
     def forward(self, x):
         x = self.image_features(x)
         x = self.combined_layers(x)
+        x = torch.sigmoid(x)
         return x
 
 
@@ -66,9 +65,15 @@ model = Network(resnet_model).to(device)
 model.load_state_dict(torch.load(str(path_to_models / "resnet50.final.pth"), map_location=device))
 model.eval()
 
-def classify(images):
+def classify(images, top_k=1):
     converted_images = [image_transforms(Image.fromarray(img)) for img in images]
     with torch.no_grad():
         output = model(torch.stack(converted_images))
-        predictions = output.argmax(dim=1, keepdim=True).squeeze()
-        return [idx_to_classes[idx] for idx in list(predictions.cpu().numpy())]
+
+        combined_predictions = []
+
+        for image_preds in output.numpy():
+            top_k_preds = np.flip(np.argsort(image_preds))[:top_k]
+            combined_predictions.append([(classes[i], float(image_preds[i])) for i in top_k_preds])
+
+        return combined_predictions

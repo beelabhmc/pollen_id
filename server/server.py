@@ -30,7 +30,11 @@ def classify_pollen():
     img = decode_b64_img(b64image.read())
     crops = generate_crops(img, metadata['crop_locations'])
 
-    classifications = classify(crops)
+    try:
+        classifications = classify(crops, top_k=metadata['top_n'])
+    except Exception as e:
+        print(e)
+        classifications = ["Unknown"] * len(crops)
 
     return jsonify({"filename": b64image.filename, "classified_pollen": classifications})
 
